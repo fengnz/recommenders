@@ -3,12 +3,122 @@
 
 import tensorflow.keras as keras
 from tensorflow.keras import layers
+import tensorflow as tf
 
 
 from recommenders.models.newsrec.models.base_model import BaseModel
 from recommenders.models.newsrec.models.layers import AttLayer2, SelfAttention
+from fast_transformer import FastTransformer
+
+from keras import backend as K
+from keras.layers import Lambda
+
+from keras.utils.np_utils import to_categorical
+from keras.layers import *
+from keras.models import Model, load_model
+from keras import backend as K
+from sklearn.metrics import *
+from keras.optimizers import *
+
 
 __all__ = ["NRMSModel"]
+
+
+
+class Fastformer(layers.Layer):
+
+    def __init__(self, nb_head, size_per_head, **kwargs):
+        self.nb_head = nb_head
+        self.size_per_head = size_per_head
+        self.output_dim = nb_head*size_per_head
+        self.now_input_shape=None
+        super(Fastformer, self).__init__(**kwargs)
+
+    def build(self, input_shape):
+        self.now_input_shape=input_shape
+        self.WQ = self.add_weight(name='WQ',
+                                  shape=(input_shape[0][-1], self.output_dim),
+                                  initializer='glorot_uniform',
+                                  trainable=True)
+        self.WK = self.add_weight(name='WK',
+                                  shape=(input_shape[1][-1], self.output_dim),
+                                  initializer='glorot_uniform',
+                                  trainable=True)
+        self.Wq = self.add_weight(name='Wq',
+                                  shape=(self.output_dim,self.nb_head),
+                                  initializer='glorot_uniform',
+                                  trainable=True)
+        self.Wk = self.add_weight(name='Wk',
+                                  shape=(self.output_dim,self.nb_head),
+                                  initializer='glorot_uniform',
+                                  trainable=True)
+
+        self.WP = self.add_weight(name='WP',
+                                  shape=(self.output_dim,self.output_dim),
+                                  initializer='glorot_uniform',
+                                  trainable=True)
+
+
+        super(Fastformer, self).build(input_shape)
+
+    def call(self, x):
+        if len(x) == 2:
+            Q_seq,K_seq = x
+        elif len(x) == 4:
+            Q_seq,K_seq,Q_mask,K_mask = x #different mask lengths, reserved for cross attention
+
+        Q_seq = K.dot(Q_seq, self.WQ)
+        Q_seq_reshape = K.reshape(Q_seq, (-1, self.now_input_shape[0][1], self.nb_head*self.size_per_head))
+
+        Q_att=  K.permute_dimensions(K.dot(Q_seq_reshape, self.Wq),(0,2,1))/ self.size_per_head**0.5
+
+        if len(x)  == 4:
+            Q_att = Q_att-(1-K.expand_dims(Q_mask,axis=1))*1e8
+
+        Q_att = K.softmax(Q_att)
+        Q_seq = K.reshape(Q_seq, (-1,self.now_input_shape[0][1], self.nb_head, self.size_per_head))
+        Q_seq = K.permute_dimensions(Q_seq, (0,2,1,3))
+
+        K_seq = K.dot(K_seq, self.WK)
+        K_seq = K.reshape(K_seq, (-1,self.now_input_shape[1][1], self.nb_head, self.size_per_head))
+        K_seq = K.permute_dimensions(K_seq, (0,2,1,3))
+
+        Q_att = Lambda(lambda x: K.repeat_elements(K.expand_dims(x,axis=3),self.size_per_head,axis=3))(Q_att)
+        global_q = K.sum(multiply([Q_att, Q_seq]),axis=2)
+
+        global_q_repeat = Lambda(lambda x: K.repeat_elements(K.expand_dims(x,axis=2), self.now_input_shape[1][1],axis=2))(global_q)
+
+        QK_interaction = multiply([K_seq, global_q_repeat])
+        QK_interaction_reshape = K.reshape(QK_interaction, (-1, self.now_input_shape[0][1], self.nb_head*self.size_per_head))
+        K_att = K.permute_dimensions(K.dot(QK_interaction_reshape, self.Wk),(0,2,1))/ self.size_per_head**0.5
+
+        if len(x)  == 4:
+            K_att = K_att-(1-K.expand_dims(K_mask,axis=1))*1e8
+
+        K_att = K.softmax(K_att)
+
+        K_att = Lambda(lambda x: K.repeat_elements(K.expand_dims(x,axis=3),self.size_per_head,axis=3))(K_att)
+
+        global_k = K.sum(multiply([K_att, QK_interaction]),axis=2)
+
+        global_k_repeat = Lambda(lambda x: K.repeat_elements(K.expand_dims(x,axis=2), self.now_input_shape[0][1],axis=2))(global_k)
+        #Q=V
+        QKQ_interaction = multiply([global_k_repeat, Q_seq])
+        QKQ_interaction = K.permute_dimensions(QKQ_interaction, (0,2,1,3))
+        QKQ_interaction = K.reshape(QKQ_interaction, (-1,self.now_input_shape[0][1], self.nb_head*self.size_per_head))
+        QKQ_interaction = K.dot(QKQ_interaction, self.WP)
+        QKQ_interaction = K.reshape(QKQ_interaction, (-1,self.now_input_shape[0][1], self.nb_head,self.size_per_head))
+        QKQ_interaction = K.permute_dimensions(QKQ_interaction, (0,2,1,3))
+        QKQ_interaction = QKQ_interaction+Q_seq
+        QKQ_interaction = K.permute_dimensions(QKQ_interaction, (0,2,1,3))
+        QKQ_interaction = K.reshape(QKQ_interaction, (-1,self.now_input_shape[0][1], self.nb_head*self.size_per_head))
+
+        #many operations can be optimized if higher versions are used.
+
+        return QKQ_interaction
+
+    def compute_output_shape(self, input_shape):
+        return (input_shape[0][0], input_shape[0][1], self.output_dim)
 
 
 class NRMSModel(BaseModel):
@@ -118,6 +228,10 @@ class NRMSModel(BaseModel):
         return model
 
     def _build_newsencoder(self, embedding_layer):
+
+
+
+
         """The main function to create news encoder of NRMS.
 
         Args:
@@ -129,14 +243,47 @@ class NRMSModel(BaseModel):
         hparams = self.hparams
         sequences_input_title = keras.Input(shape=(hparams.title_size,), dtype="int32")
 
+
+        qmask=Lambda(lambda x:  K.cast(K.cast(x,'bool'),'float32'))(sequences_input_title)
+
         embedded_sequences_title = embedding_layer(sequences_input_title)
+        print("embedded_sequences_title.shape")
+        print(embedded_sequences_title.shape)
 
         y = layers.Dropout(hparams.dropout)(embedded_sequences_title)
-        y = SelfAttention(hparams.head_num, hparams.head_dim, seed=self.seed)([y, y, y])
+
+        print('looks good')
+
+        useFastFormer = 2
+
+        print('Use Fast Former: ')
+        print(str(useFastFormer))
+
+        if (useFastFormer == 1):
+            # This one doesn't work'
+            mask = tf.ones([1, 300], dtype=tf.bool)
+            model = FastTransformer(
+                num_tokens = hparams.head_num,
+                dim = hparams.head_dim,
+                depth = 2,
+                max_seq_len = 300,
+                absolute_pos_emb = None, # Absolute positional embeddings
+                mask = mask
+            )
+            # x = tf.experimental.numpy.random.randint(0, 20000, (1, 4096))
+            # fast_former_layer = model(x)
+
+            y = model(y)
+        elif (useFastFormer == 2):
+            y = Fastformer(20,20)([y,y,qmask,qmask])
+        else:
+            y = SelfAttention(hparams.head_num, hparams.head_dim, seed=self.seed)([y, y, y])
+
         y = layers.Dropout(hparams.dropout)(y)
         pred_title = AttLayer2(hparams.attention_hidden_dim, seed=self.seed)(y)
 
         model = keras.Model(sequences_input_title, pred_title, name="news_encoder")
+        print(model.summary())
         return model
 
     def _build_nrms(self):
