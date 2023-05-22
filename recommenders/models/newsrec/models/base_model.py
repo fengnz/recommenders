@@ -158,6 +158,14 @@ class BaseModel:
             list: A list of values, including update operation, total loss, data loss, and merged summary.
         """
         train_input, train_label = self._get_input_label_from_iter(train_batch_data)
+
+        timestamp_input = np.reshape(1, (1, ))  # Reshape to (1, 1)
+        expanded_timestamp = np.repeat(timestamp_input, 32, axis=0)
+
+        train_input.append(expanded_timestamp)
+
+        print("look here")
+        print(train_input)
         rslt = self.model.train_on_batch(train_input, train_label)
         return rslt
 

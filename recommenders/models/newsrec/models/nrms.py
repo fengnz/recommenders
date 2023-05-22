@@ -23,6 +23,7 @@ from keras.optimizers import *
 
 __all__ = ["NRMSModel"]
 
+from recommenders.models.newsrec.models.time2vec import Time2Vec
 
 
 class Fastformer(layers.Layer):
@@ -225,6 +226,7 @@ class NRMSModel(BaseModel):
         user_present = AttLayer2(hparams.attention_hidden_dim, seed=self.seed)(y)
 
         model = keras.Model(his_input_title, user_present, name="user_encoder")
+        model.summary()
         return model
 
     def _build_newsencoder(self, embedding_layer):
@@ -254,7 +256,7 @@ class NRMSModel(BaseModel):
 
         print('looks good')
 
-        useFastFormer = 2
+        useFastFormer = 0
 
         print('Use Fast Former: ')
         print(str(useFastFormer))
@@ -325,16 +327,48 @@ class NRMSModel(BaseModel):
         self.newsencoder = titleencoder
 
         user_present = self.userencoder(his_input_title)
+
+
+        timestamp_input = keras.Input(shape=(1,), dtype="int32", name="timestamp")
+
+        # Define the Time2Vec layer
+        embedding_dim = 50  # Specify the desired dimensionality of the Time2Vec embeddings
+        #time2vec_embedding = Time2Vec(embedding_dim)(timestamp_input)
+
+        time2vec_embedding = keras.layers.Embedding(input_dim=7, output_dim=400)(timestamp_input)
+        combined_input = user_present + time2vec_embedding;
+
+        # Expand dimensions of the Time2Vec embedding to match the shape of user_input
+        #expanded_time2vec = keras.layers.Lambda(lambda x: tf.expand_dims(x, axis=1))(time2vec_embedding)
+        #tiled_time2vec = keras.layers.Concatenate(axis=1)(
+        #    [expanded_time2vec] * tf.shape(user_present)[1]
+        #)
+
+        # Concatenate the user_input tensor with the Time2Vec embeddings
+        #combined_input = keras.layers.Concatenate(axis=-1)([user_present, tiled_time2vec])
+
+        # Read the timestamp for this user_present
+        #user_present_timeStamp = ...
+
+
+        # Add user present_timeStamp
+
+
         news_present = layers.TimeDistributed(self.newsencoder)(pred_input_title)
         news_present_one = self.newsencoder(pred_title_one_reshape)
 
-        preds = layers.Dot(axes=-1)([news_present, user_present])
+        # Pass user_present_timestamp to Time2Vec layer
+        # Make sure time2Vec output has the correct dimension
+        # Add time2Vec output to news_present_one
+
+        preds = layers.Dot(axes=-1)([news_present, combined_input])
         preds = layers.Activation(activation="softmax")(preds)
 
-        pred_one = layers.Dot(axes=-1)([news_present_one, user_present])
+        pred_one = layers.Dot(axes=-1)([news_present_one, combined_input])
         pred_one = layers.Activation(activation="sigmoid")(pred_one)
 
-        model = keras.Model([his_input_title, pred_input_title], preds)
-        scorer = keras.Model([his_input_title, pred_input_title_one], pred_one)
+        model = keras.Model([his_input_title, pred_input_title, timestamp_input], preds)
+        model.summary()
+        scorer = keras.Model([his_input_title, pred_input_title_one, timestamp_input], pred_one)
 
         return model, scorer
