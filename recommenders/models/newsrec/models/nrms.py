@@ -225,6 +225,7 @@ class NRMSModel(BaseModel):
         user_present = AttLayer2(hparams.attention_hidden_dim, seed=self.seed)(y)
 
         model = keras.Model(his_input_title, user_present, name="user_encoder")
+        model.summary()
         return model
 
     def _build_newsencoder(self, embedding_layer):
@@ -337,4 +338,6 @@ class NRMSModel(BaseModel):
         model = keras.Model([his_input_title, pred_input_title], preds)
         scorer = keras.Model([his_input_title, pred_input_title_one], pred_one)
 
+        model.summary()
+        scorer.summary()
         return model, scorer
