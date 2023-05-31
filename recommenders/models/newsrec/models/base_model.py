@@ -162,10 +162,8 @@ class BaseModel:
         timestamp_input = np.reshape(1, (1, ))  # Reshape to (1, 1)
         expanded_timestamp = np.repeat(timestamp_input, 32, axis=0)
 
-        train_input.append(expanded_timestamp)
+        #train_input.append(expanded_timestamp)
 
-        print("look here")
-        print(train_input)
         rslt = self.model.train_on_batch(train_input, train_label)
         return rslt
 

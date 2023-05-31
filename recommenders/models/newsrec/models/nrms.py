@@ -171,6 +171,7 @@ class NRMSModel(BaseModel):
         input_feat = [
             batch_data["clicked_title_batch"],
             batch_data["candidate_title_batch"],
+            batch_data["timestamps"],
         ]
         input_label = batch_data["labels"]
         return input_feat, input_label
@@ -336,7 +337,8 @@ class NRMSModel(BaseModel):
         #time2vec_embedding = Time2Vec(embedding_dim)(timestamp_input)
 
         time2vec_embedding = keras.layers.Embedding(input_dim=7, output_dim=400)(timestamp_input)
-        combined_input = user_present + time2vec_embedding;
+        time2vec_embedding_reshape = layers.Reshape(target_shape=(400,))(time2vec_embedding)
+        combined_input = user_present + time2vec_embedding_reshape;
 
         # Expand dimensions of the Time2Vec embedding to match the shape of user_input
         #expanded_time2vec = keras.layers.Lambda(lambda x: tf.expand_dims(x, axis=1))(time2vec_embedding)

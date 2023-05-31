@@ -4,6 +4,7 @@
 import tensorflow as tf
 import numpy as np
 import pickle
+from datetime import datetime
 
 from recommenders.models.deeprec.io.iterator import BaseIterator
 from recommenders.models.newsrec.newsrec_utils import word_tokenize, newsample
@@ -108,6 +109,7 @@ class MINDIterator(BaseIterator):
         """
         self.histories = []
         self.imprs = []
+        self.timestamps = []
         self.labels = []
         self.impr_indexes = []
         self.uindexes = []
@@ -116,6 +118,10 @@ class MINDIterator(BaseIterator):
             impr_index = 0
             for line in rd:
                 uid, time, history, impr = line.strip("\n").split(self.col_spliter)[-4:]
+
+
+                date_obj = datetime.strptime(time, '%m/%d/%Y %I:%M:%S %p')
+                weekday = date_obj.weekday()
 
                 history = [self.nid2index[i] for i in history.split()]
                 history = [0] * (self.his_size - len(history)) + history[
@@ -127,6 +133,7 @@ class MINDIterator(BaseIterator):
                 uindex = self.uid2index[uid] if uid in self.uid2index else 0
 
                 self.histories.append(history)
+                self.timestamps.append(weekday)
                 self.imprs.append(impr_news)
                 self.labels.append(label)
                 self.impr_indexes.append(impr_index)
@@ -147,6 +154,7 @@ class MINDIterator(BaseIterator):
         if self.npratio > 0:
             impr_label = self.labels[line]
             impr = self.imprs[line]
+            timestamp = self.timestamps[line]
 
             poss = []
             negs = []
@@ -175,11 +183,13 @@ class MINDIterator(BaseIterator):
                     user_index,
                     candidate_title_index,
                     click_title_index,
+                    timestamp
                 )
 
         else:
             impr_label = self.labels[line]
             impr = self.imprs[line]
+            timestamp = self.timestamps[line]
 
             for news, label in zip(impr, impr_label):
                 candidate_title_index = []
@@ -198,6 +208,7 @@ class MINDIterator(BaseIterator):
                     user_index,
                     candidate_title_index,
                     click_title_index,
+                    timestamp
                 )
 
     def load_data_from_file(self, news_file, behavior_file):
@@ -219,6 +230,7 @@ class MINDIterator(BaseIterator):
 
         label_list = []
         imp_indexes = []
+        timestamp_list = []
         user_indexes = []
         candidate_title_indexes = []
         click_title_indexes = []
@@ -236,12 +248,14 @@ class MINDIterator(BaseIterator):
                 user_index,
                 candidate_title_index,
                 click_title_index,
+                timestamp
             ) in self.parser_one_line(index):
                 candidate_title_indexes.append(candidate_title_index)
                 click_title_indexes.append(click_title_index)
                 imp_indexes.append(imp_index)
                 user_indexes.append(user_index)
                 label_list.append(label)
+                timestamp_list.append(timestamp)
 
                 cnt += 1
                 if cnt >= self.batch_size:
@@ -251,12 +265,14 @@ class MINDIterator(BaseIterator):
                         user_indexes,
                         candidate_title_indexes,
                         click_title_indexes,
+                        timestamp_list
                     )
                     label_list = []
                     imp_indexes = []
                     user_indexes = []
                     candidate_title_indexes = []
                     click_title_indexes = []
+                    timestamp_list = []
                     cnt = 0
 
         if cnt > 0:
@@ -266,6 +282,7 @@ class MINDIterator(BaseIterator):
                 user_indexes,
                 candidate_title_indexes,
                 click_title_indexes,
+                timestamp_list
             )
 
     def _convert_data(
@@ -275,6 +292,7 @@ class MINDIterator(BaseIterator):
         user_indexes,
         candidate_title_indexes,
         click_title_indexes,
+        timestamp_list,
     ):
         """Convert data into numpy arrays that are good for further model operation.
 
@@ -290,6 +308,7 @@ class MINDIterator(BaseIterator):
         """
 
         labels = np.asarray(label_list, dtype=np.float32)
+        timestamps = np.asarray(timestamp_list, dtype=np.float32)
         imp_indexes = np.asarray(imp_indexes, dtype=np.int32)
         user_indexes = np.asarray(user_indexes, dtype=np.int32)
         candidate_title_index_batch = np.asarray(
@@ -302,6 +321,7 @@ class MINDIterator(BaseIterator):
             "clicked_title_batch": click_title_index_batch,
             "candidate_title_batch": candidate_title_index_batch,
             "labels": labels,
+            "timestamps": timestamps,
         }
 
     def load_user_from_file(self, news_file, behavior_file):
