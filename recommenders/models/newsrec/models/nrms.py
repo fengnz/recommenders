@@ -8,7 +8,6 @@ import tensorflow as tf
 
 from recommenders.models.newsrec.models.base_model import BaseModel
 from recommenders.models.newsrec.models.layers import AttLayer2, SelfAttention
-from fast_transformer import FastTransformer
 
 from keras import backend as K
 from keras.layers import Lambda
@@ -264,19 +263,7 @@ class NRMSModel(BaseModel):
 
         if (useFastFormer == 1):
             # This one doesn't work'
-            mask = tf.ones([1, 300], dtype=tf.bool)
-            model = FastTransformer(
-                num_tokens = hparams.head_num,
-                dim = hparams.head_dim,
-                depth = 2,
-                max_seq_len = 300,
-                absolute_pos_emb = None, # Absolute positional embeddings
-                mask = mask
-            )
-            # x = tf.experimental.numpy.random.randint(0, 20000, (1, 4096))
-            # fast_former_layer = model(x)
 
-            y = model(y)
         elif (useFastFormer == 2):
             y = Fastformer(20,20)([y,y,qmask,qmask])
         else:
