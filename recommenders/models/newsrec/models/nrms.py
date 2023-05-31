@@ -263,7 +263,7 @@ class NRMSModel(BaseModel):
 
         if (useFastFormer == 1):
             # This one doesn't work'
-
+            pass
         elif (useFastFormer == 2):
             y = Fastformer(20,20)([y,y,qmask,qmask])
         else:
