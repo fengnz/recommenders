@@ -323,7 +323,7 @@ class NRMSModel(BaseModel):
         embedding_dim = 50  # Specify the desired dimensionality of the Time2Vec embeddings
         #time2vec_embedding = Time2Vec(embedding_dim)(timestamp_input)
 
-        time2vec_embedding = keras.layers.Embedding(input_dim=7, output_dim=400)(timestamp_input)
+        time2vec_embedding = keras.layers.Embedding(input_dim=31, output_dim=400)(timestamp_input)
         time2vec_embedding_reshape = layers.Reshape(target_shape=(400,))(time2vec_embedding)
         combined_input = user_present + time2vec_embedding_reshape;
 
