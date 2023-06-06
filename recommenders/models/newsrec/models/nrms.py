@@ -319,13 +319,10 @@ class NRMSModel(BaseModel):
 
         timestamp_input = keras.Input(shape=(1,), dtype="int32", name="timestamp")
 
-        # Define the Time2Vec layer
-        embedding_dim = 50  # Specify the desired dimensionality of the Time2Vec embeddings
-        #time2vec_embedding = Time2Vec(embedding_dim)(timestamp_input)
-
-        time2vec_embedding = keras.layers.Embedding(input_dim=31, output_dim=400)(timestamp_input)
+        timestamp_one_hot = tf.one_hot(timestamp_input, depth=7)  # Convert to one-hot encoding
+        time2vec_embedding = keras.layers.Embedding(input_dim=7, output_dim=400)(timestamp_one_hot)
         time2vec_embedding_reshape = layers.Reshape(target_shape=(400,))(time2vec_embedding)
-        combined_input = user_present + time2vec_embedding_reshape;
+        combined_input = user_present + time2vec_embedding_reshape
 
         # Expand dimensions of the Time2Vec embedding to match the shape of user_input
         #expanded_time2vec = keras.layers.Lambda(lambda x: tf.expand_dims(x, axis=1))(time2vec_embedding)

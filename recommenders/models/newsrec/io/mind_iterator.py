@@ -135,7 +135,7 @@ class MINDIterator(BaseIterator):
                 uindex = self.uid2index[uid] if uid in self.uid2index else 0
 
                 self.histories.append(history)
-                self.timestamps.append(day_of_month)
+                self.timestamps.append(weekday)
                 self.imprs.append(impr_news)
                 self.labels.append(label)
                 self.impr_indexes.append(impr_index)
