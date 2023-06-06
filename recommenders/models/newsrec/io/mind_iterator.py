@@ -124,6 +124,8 @@ class MINDIterator(BaseIterator):
                 weekday = date_obj.weekday()
 
                 day_of_month = date_obj.day
+                day_of_year = date_obj.timetuple().tm_yday
+
 
                 history = [self.nid2index[i] for i in history.split()]
                 history = [0] * (self.his_size - len(history)) + history[
@@ -135,7 +137,7 @@ class MINDIterator(BaseIterator):
                 uindex = self.uid2index[uid] if uid in self.uid2index else 0
 
                 self.histories.append(history)
-                self.timestamps.append(weekday)
+                self.timestamps.append(day_of_year)
                 self.imprs.append(impr_news)
                 self.labels.append(label)
                 self.impr_indexes.append(impr_index)

@@ -318,9 +318,7 @@ class NRMSModel(BaseModel):
 
 
         timestamp_input = keras.Input(shape=(1,), dtype="int32", name="timestamp")
-
-        timestamp_one_hot = tf.one_hot(timestamp_input, depth=7)  # Convert to one-hot encoding
-        time2vec_embedding = keras.layers.Embedding(input_dim=7, output_dim=400)(timestamp_one_hot)
+        time2vec_embedding = keras.layers.Embedding(input_dim=366, output_dim=400)(timestamp_input)
         time2vec_embedding_reshape = layers.Reshape(target_shape=(400,))(time2vec_embedding)
         combined_input = user_present + time2vec_embedding_reshape
 
