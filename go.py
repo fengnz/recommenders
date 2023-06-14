@@ -13,6 +13,8 @@ from recommenders.models.newsrec.newsrec_utils import prepare_hparams
 from recommenders.models.newsrec.models.nrms import NRMSModel
 from recommenders.models.newsrec.io.mind_iterator import MINDIterator
 from recommenders.models.newsrec.newsrec_utils import get_mind_data_set
+import tensorflow.python.debug as tfdbg
+
 
 print("System version: {}".format(sys.version))
 print("Tensorflow version: {}".format(tf.__version__))
@@ -59,6 +61,7 @@ hparams = prepare_hparams(yaml_file,
                           userDict_file=userDict_file,
                           batch_size=batch_size,
                           epochs=epochs,
+                          optimizer="rmsprop",
                           show_step=10)
 print(hparams)
 #%%
@@ -74,6 +77,7 @@ print('hi')
 #%%
 
 #%%
+
 model.fit(train_news_file, train_behaviors_file, valid_news_file, valid_behaviors_file)
 res_syn = model.run_eval(valid_news_file, valid_behaviors_file)
 print(res_syn)

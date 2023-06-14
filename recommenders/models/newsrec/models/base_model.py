@@ -122,6 +122,8 @@ class BaseModel:
 
         if optimizer == "adam":
             train_opt = keras.optimizers.Adam(lr=lr)
+        elif optimizer == "rmsprop":
+            train_opt = tf.compat.v1.train.RMSPropOptimizer(lr)
 
         return train_opt
 
