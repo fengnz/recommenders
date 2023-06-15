@@ -61,7 +61,7 @@ hparams = prepare_hparams(yaml_file,
                           userDict_file=userDict_file,
                           batch_size=batch_size,
                           epochs=epochs,
-                          optimizer="rmsprop",
+                          optimizer="adadelta",
                           show_step=10)
 print(hparams)
 #%%

@@ -124,6 +124,8 @@ class BaseModel:
             train_opt = keras.optimizers.Adam(lr=lr)
         elif optimizer == "rmsprop":
             train_opt = keras.optimizers.RMSprop(learning_rate=lr)
+        elif optimizer == "adadelta":
+            train_opt = keras.optimizers.Adadelta(learning_rate=lr)
 
         return train_opt
 
