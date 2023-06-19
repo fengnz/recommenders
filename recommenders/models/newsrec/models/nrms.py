@@ -255,7 +255,7 @@ class NRMSModel(BaseModel):
 
         print('looks good')
 
-        useFastFormer = 2
+        useFastFormer = 0
 
         print('Use Fast Former: ')
         print(str(useFastFormer))
