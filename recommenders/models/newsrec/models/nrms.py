@@ -256,7 +256,7 @@ class NRMSModel(BaseModel):
 
         print('looks good')
 
-        useFastFormer = 0
+        useFastFormer = 2
 
         print('Use Fast Former: ')
         print(str(useFastFormer))
@@ -318,50 +318,31 @@ class NRMSModel(BaseModel):
         timestamp_input = keras.Input(shape=(1,), dtype="int32", name="timestamp")
         timestamp_input_float = tf.cast(timestamp_input, tf.float32)
 
-        constant_tensor = tf.ones((tf.shape(user_present)[0], 1))
-        concatenated_input = Concatenate(axis=-1)([user_present, timestamp_input_float])
+        # constant_tensor = tf.ones((tf.shape(user_present)[0], 1))
+        # concatenated_input = Concatenate(axis=-1)([user_present, timestamp_input_float])
 
-        combined_input = concatenated_input
-
-
-
-        # time2vec_embedding = keras.layers.Embedding(input_dim=366, output_dim=400)(timestamp_input)
-        # time2vec_embedding_reshape = layers.Reshape(target_shape=(400,))(time2vec_embedding)
-        # combined_input = user_present + time2vec_embedding_reshape
-
-        # Expand dimensions of the Time2Vec embedding to match the shape of user_input
-        #expanded_time2vec = keras.layers.Lambda(lambda x: tf.expand_dims(x, axis=1))(time2vec_embedding)
-        #tiled_time2vec = keras.layers.Concatenate(axis=1)(
-        #    [expanded_time2vec] * tf.shape(user_present)[1]
-        #)
-
-        # Concatenate the user_input tensor with the Time2Vec embeddings
-        #combined_input = keras.layers.Concatenate(axis=-1)([user_present, tiled_time2vec])
-
-        # Read the timestamp for this user_present
-        #user_present_timeStamp = ...
-
-
-        # Add user present_timeStamp
-
+        # combined_input = concatenated_input
 
         news_present = layers.TimeDistributed(self.newsencoder)(pred_input_title)
 
-        constant_tensor2 = tf.ones((tf.shape(news_present)[0], news_present.shape[1], 1))
-        concatenated_tensor2 = Concatenate(axis=-1)([news_present, constant_tensor2])
+        # constant_tensor2 = tf.ones((tf.shape(news_present)[0], news_present.shape[1], 1))
+        # concatenated_tensor2 = Concatenate(axis=-1)([news_present, constant_tensor2])
 
         news_present_one = self.newsencoder(pred_title_one_reshape)
 
-        news_present_one_add_date = Concatenate(axis=1)([news_present_one, constant_tensor])
+        # news_present_one_add_date = Concatenate(axis=1)([news_present_one, constant_tensor])
 
         # Pass user_present_timestamp to Time2Vec layer
         # Make sure time2Vec output has the correct dimension
         # Add time2Vec output to news_present_one
 
-        preds = layers.Dot(axes=-1)([concatenated_tensor2, combined_input])
-        preds = layers.Activation(activation="softmax")(preds)
+        preds = layers.Dot(axes=-1)([news_present, user_present])
+        concatenated = concatenate([preds, timestamp_input_float])
+        preds = Dense(units=5, activation='tanh')(concatenated)
 
-        pred_one = layers.Dot(axes=-1)([news_present_one_add_date, combined_input])
+        # preds = layers.Activation(activation="softmax")(preds)
+
+        pred_one = layers.Dot(axes=-1)([news_present_one, user_present])
         pred_one = layers.Activation(activation="sigmoid")(pred_one)
 
         model = keras.Model([his_input_title, pred_input_title, timestamp_input], preds)
