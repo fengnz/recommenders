@@ -8,7 +8,6 @@ import tensorflow as tf
 
 from recommenders.models.newsrec.models.base_model import BaseModel
 from recommenders.models.newsrec.models.layers import AttLayer2, SelfAttention
-from fast_transformer import FastTransformer
 
 from keras import backend as K
 from keras.layers import Lambda
@@ -24,6 +23,7 @@ from keras.optimizers import *
 __all__ = ["NRMSModel"]
 
 
+useFastFormer = 0
 
 class Fastformer(layers.Layer):
 
@@ -218,13 +218,22 @@ class NRMSModel(BaseModel):
             shape=(hparams.his_size, hparams.title_size), dtype="int32"
         )
 
+
+
         click_title_presents = layers.TimeDistributed(titleencoder)(his_input_title)
-        y = SelfAttention(hparams.head_num, hparams.head_dim, seed=self.seed)(
-            [click_title_presents] * 3
-        )
+
+        if (useFastFormer == 22):
+            print('use faster former for user encoder')
+            y = Fastformer(20,20)([click_title_presents,click_title_presents,qmask,qmask])
+        else:
+            y = SelfAttention(hparams.head_num, hparams.head_dim, seed=self.seed)(
+                [click_title_presents] * 3
+            )
+
         user_present = AttLayer2(hparams.attention_hidden_dim, seed=self.seed)(y)
 
         model = keras.Model(his_input_title, user_present, name="user_encoder")
+        print(model.summary())
         return model
 
     def _build_newsencoder(self, embedding_layer):
@@ -254,7 +263,6 @@ class NRMSModel(BaseModel):
 
         print('looks good')
 
-        useFastFormer = 2
 
         print('Use Fast Former: ')
         print(str(useFastFormer))
@@ -262,22 +270,16 @@ class NRMSModel(BaseModel):
         if (useFastFormer == 1):
             # This one doesn't work'
             mask = tf.ones([1, 300], dtype=tf.bool)
-            model = FastTransformer(
-                num_tokens = hparams.head_num,
-                dim = hparams.head_dim,
-                depth = 2,
-                max_seq_len = 300,
-                absolute_pos_emb = None, # Absolute positional embeddings
-                mask = mask
-            )
             # x = tf.experimental.numpy.random.randint(0, 20000, (1, 4096))
             # fast_former_layer = model(x)
 
             y = model(y)
         elif (useFastFormer == 2):
+            print('use fast former')
             y = Fastformer(20,20)([y,y,qmask,qmask])
         else:
             y = SelfAttention(hparams.head_num, hparams.head_dim, seed=self.seed)([y, y, y])
+            print('use nrms')
 
         y = layers.Dropout(hparams.dropout)(y)
         pred_title = AttLayer2(hparams.attention_hidden_dim, seed=self.seed)(y)

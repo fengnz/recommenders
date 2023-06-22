@@ -2,13 +2,18 @@
 # Licensed under the MIT License.
 
 import abc
+import os
 import time
+import datetime
 import numpy as np
 from tqdm import tqdm
 import tensorflow as tf
 from tensorflow.compat.v1 import keras
 
 from recommenders.models.deeprec.deeprec_utils import cal_metric
+
+from tensorflow.keras.callbacks import ModelCheckpoint
+
 
 tf.compat.v1.disable_eager_execution()
 tf.compat.v1.experimental.output_all_intermediates(True)
@@ -59,10 +64,15 @@ class BaseModel:
         self.support_quick_scoring = hparams.support_quick_scoring
 
         # set GPU use with on demand growth
-        gpu_options = tf.compat.v1.GPUOptions(allow_growth=True)
-        sess = tf.compat.v1.Session(
-            config=tf.compat.v1.ConfigProto(gpu_options=gpu_options)
-        )
+        #gpu_options = tf.compat.v1.GPUOptions(allow_growth=True)
+        #sess = tf.compat.v1.Session(
+        #    config=tf.compat.v1.ConfigProto(gpu_options=gpu_options)
+        #)
+
+
+        gpu_options = tf.compat.v1.GPUOptions(allow_growth=True, visible_device_list='0')
+        sess = tf.compat.v1.Session(config=tf.compat.v1.ConfigProto(gpu_options=gpu_options))
+
 
         # set this TensorFlow session as the default session for Keras
         tf.compat.v1.keras.backend.set_session(sess)
@@ -74,7 +84,14 @@ class BaseModel:
         self.loss = self._get_loss()
         self.train_optimizer = self._get_opt()
 
+        print("compile model")
         self.model.compile(loss=self.loss, optimizer=self.train_optimizer)
+
+        #checkpoint_path = "/home/yden034/phd/nrms_o/training/cp2023-04-28.ckpt"
+        # Load the saved weights if the file exists
+        #self.model.load_weights(checkpoint_path)
+        #print("Loaded model weights.")
+        #self.model.compile(loss=self.loss, optimizer=self.train_optimizer)
 
     def _init_embedding(self, file_path):
         """Load pre-trained embeddings as a constant tensor.
@@ -199,7 +216,18 @@ class BaseModel:
             object: An instance of self.
         """
 
-        for epoch in range(1, self.hparams.epochs + 1):
+
+        # Get the current date
+        current_date = datetime.date.today()
+
+        # Format the date as a string
+        date_string = current_date.strftime('%Y-%m-%d-%h')
+
+        # Determine the epoch to start training from
+        initial_epoch = 0
+        #TODO find the initial_epoch value to skip epochs
+
+        for epoch in range(initial_epoch+1, self.hparams.epochs + 1):
             step = 0
             self.hparams.current_epoch = epoch
             epoch_loss = 0
@@ -278,6 +306,11 @@ class BaseModel:
                     epoch, train_time, eval_time
                 )
             )
+
+            save_checkpoint_path = "/home/yden034/phd/nrms_o/training/cp" + date_string + ".ckpt"
+            self.model.save_weights(save_checkpoint_path)
+            print(f"Epoch {epoch}/{self.hparams.epochs} - Saved model weights")
+
 
         return self
 

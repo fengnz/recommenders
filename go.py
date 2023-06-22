@@ -14,8 +14,15 @@ from recommenders.models.newsrec.models.nrms import NRMSModel
 from recommenders.models.newsrec.io.mind_iterator import MINDIterator
 from recommenders.models.newsrec.newsrec_utils import get_mind_data_set
 
+from tensorflow.keras.callbacks import ModelCheckpoint
+
 print("System version: {}".format(sys.version))
 print("Tensorflow version: {}".format(tf.__version__))
+
+gpu_devices = tf.config.experimental.list_physical_devices('GPU')
+for device in gpu_devices:
+    tf.config.experimental.set_memory_growth(device, True)
+
 
 #%%
 tf.config.list_physical_devices()
@@ -30,7 +37,15 @@ batch_size = 32
 MIND_type = 'demo'
 
 tmpdir = TemporaryDirectory()
-data_path = '/Users/fennng/Documents/phd/jupiter/nrms'
+data_path = '/home/yden034/phd/jupyter/nrms'
+
+
+
+
+checkpoint_path = "/home/yden034/phd/nrms/training/cp.ckpt"
+checkpoint_callback = ModelCheckpoint(filepath=checkpoint_path, save_weights_only=True, verbose=1)
+
+
 
 train_news_file = os.path.join(data_path, 'train', r'news.tsv')
 train_behaviors_file = os.path.join(data_path, 'train', r'behaviors.tsv')
@@ -74,6 +89,8 @@ print('hi')
 #%%
 
 #%%
+
+
 model.fit(train_news_file, train_behaviors_file, valid_news_file, valid_behaviors_file)
 res_syn = model.run_eval(valid_news_file, valid_behaviors_file)
 print(res_syn)
