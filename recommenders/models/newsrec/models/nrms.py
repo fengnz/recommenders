@@ -316,7 +316,9 @@ class NRMSModel(BaseModel):
 
         user_present = self.userencoder(his_input_title)
         timestamp_input = keras.Input(shape=(1,), dtype="int32", name="timestamp")
-        timestamp_input_float = tf.cast(timestamp_input, tf.float32)
+
+        timestamp_input_float = keras.layers.Normalization()(timestamp_input)
+        #timestamp_input_float = tf.cast(timestamp_input, tf.float32)
 
         # constant_tensor = tf.ones((tf.shape(user_present)[0], 1))
         # concatenated_input = Concatenate(axis=-1)([user_present, timestamp_input_float])
