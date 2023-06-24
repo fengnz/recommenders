@@ -30,7 +30,7 @@ batch_size = 32
 MIND_type = 'large'
 
 tmpdir = TemporaryDirectory()
-data_path = '/home/yden034/nrms/' + MIND_type
+data_path = '/home/yden034/fast_former/' + MIND_type
 
 train_news_file = os.path.join(data_path, 'train', r'news.tsv')
 train_behaviors_file = os.path.join(data_path, 'train', r'behaviors.tsv')
