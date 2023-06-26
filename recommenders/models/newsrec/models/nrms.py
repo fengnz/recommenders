@@ -254,17 +254,16 @@ class NRMSModel(BaseModel):
 
         y = layers.Dropout(hparams.dropout)(embedded_sequences_title)
 
-        print('looks good')
 
-        useFastFormer = 0
+        useFastFormer = 2
 
-        print('Use Fast Former: ')
+
         print(str(useFastFormer))
-
         if (useFastFormer == 1):
             # This one doesn't work'
             pass
         elif (useFastFormer == 2):
+            print('using faster former')
             y = Fastformer(20,20)([y,y,qmask,qmask])
         else:
             y = SelfAttention(hparams.head_num, hparams.head_dim, seed=self.seed)([y, y, y])

@@ -30,7 +30,7 @@ batch_size = 32
 MIND_type = 'demo'
 
 tmpdir = TemporaryDirectory()
-data_path = '/Users/fennng/Documents/phd/jupyter/nrms/' + MIND_type
+data_path = '/home/yden034/nrms/' + MIND_type
 
 train_news_file = os.path.join(data_path, 'train', r'news.tsv')
 train_behaviors_file = os.path.join(data_path, 'train', r'behaviors.tsv')
