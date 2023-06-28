@@ -338,11 +338,14 @@ class NRMSModel(BaseModel):
         # Make sure time2Vec output has the correct dimension
         # Add time2Vec output to news_present_one
 
-        preds = layers.Dot(axes=-1)([news_present, user_present])
-        concatenated = concatenate([preds, timestamp_input_float])
-        preds = Dense(units=5, activation='tanh')(concatenated)
 
-        # preds = layers.Activation(activation="softmax")(preds)
+        user_present_with_time = concatenate([user_present, timestamp_input_float])
+        user_present_with_time = Dense(units=400)(user_present_with_time)
+
+        preds = layers.Dot(axes=-1)([news_present, user_present_with_time])
+        #concatenated = concatenate([preds, timestamp_input_float])
+
+        preds = layers.Activation(activation="softmax")(preds)
 
         pred_one = layers.Dot(axes=-1)([news_present_one, user_present])
         pred_one = layers.Activation(activation="sigmoid")(pred_one)
