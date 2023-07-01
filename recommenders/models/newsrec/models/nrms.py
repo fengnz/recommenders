@@ -315,9 +315,9 @@ class NRMSModel(BaseModel):
         self.newsencoder = titleencoder
 
         user_present = self.userencoder(his_input_title)
-        timestamp_input = keras.Input(shape=(1,), dtype="int32", name="timestamp")
+        timestamp_input = keras.Input(shape=(3,), dtype="float32", name="timestamp")
 
-        timestamp_input_float = keras.layers.Normalization()(timestamp_input)
+        #timestamp_input_float = keras.layers.Normalization()(timestamp_input)
         #timestamp_input_float = tf.cast(timestamp_input, tf.float32)
 
         # constant_tensor = tf.ones((tf.shape(user_present)[0], 1))
@@ -339,8 +339,27 @@ class NRMSModel(BaseModel):
         # Add time2Vec output to news_present_one
 
 
-        user_present_with_time = concatenate([user_present, timestamp_input_float])
-        user_present_with_time = Dense(units=400)(user_present_with_time)
+        user_present_with_time = concatenate([user_present, timestamp_input])
+
+        #user_present_with_time = user_present
+
+        useFastFormer = 3
+
+        y = user_present_with_time
+        if (useFastFormer == 1):
+            # This one doesn't work'
+            pass
+        elif (useFastFormer == 2):
+            qmask=Lambda(lambda x:  K.cast(K.cast(x,'bool'),'float32'))(user_present_with_time)
+            y = Fastformer(20,20)([y,y,qmask,qmask])
+        else:
+            y = keras.layers.Reshape((1, 403))(y)
+            y = SelfAttention(hparams.head_num, hparams.head_dim, seed=self.seed)([y, y, y])
+
+        y = layers.Dropout(hparams.dropout)(y)
+        y = AttLayer2(hparams.attention_hidden_dim, seed=self.seed)(y)
+
+        user_present_with_time = y
 
         preds = layers.Dot(axes=-1)([news_present, user_present_with_time])
         #concatenated = concatenate([preds, timestamp_input_float])

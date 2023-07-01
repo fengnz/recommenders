@@ -121,11 +121,11 @@ class MINDIterator(BaseIterator):
 
 
                 date_obj = datetime.strptime(time, '%m/%d/%Y %I:%M:%S %p')
-                weekday = date_obj.weekday()
 
-                day_of_month = date_obj.day
-                day_of_year = date_obj.timetuple().tm_yday
-
+                # scale weekday, day of month, day of year to the same range
+                weekday = date_obj.weekday() / 7
+                day_of_month = date_obj.day / 31
+                day_of_year = date_obj.timetuple().tm_yday / 366
 
                 history = [self.nid2index[i] for i in history.split()]
                 history = [0] * (self.his_size - len(history)) + history[
@@ -137,7 +137,7 @@ class MINDIterator(BaseIterator):
                 uindex = self.uid2index[uid] if uid in self.uid2index else 0
 
                 self.histories.append(history)
-                self.timestamps.append(weekday)
+                self.timestamps.append(time)
                 self.imprs.append(impr_news)
                 self.labels.append(label)
                 self.impr_indexes.append(impr_index)
@@ -175,6 +175,14 @@ class MINDIterator(BaseIterator):
                 user_index = []
                 label = [1] + [0] * self.npratio
 
+                date_obj = datetime.strptime(timestamp, '%m/%d/%Y %I:%M:%S %p')
+
+                # scale weekday, day of month, day of year to the same range
+                weekday = date_obj.weekday() / 7
+                day_of_month = date_obj.day / 31
+                day_of_year = date_obj.timetuple().tm_yday / 366
+                timestamps = [weekday, day_of_month, day_of_year]
+
                 n = newsample(negs, self.npratio)
                 candidate_title_index = self.news_title_index[[p] + n]
                 click_title_index = self.news_title_index[self.histories[line]]
@@ -187,7 +195,7 @@ class MINDIterator(BaseIterator):
                     user_index,
                     candidate_title_index,
                     click_title_index,
-                    timestamp
+                    timestamps
                 )
 
         else:
