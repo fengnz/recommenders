@@ -340,12 +340,14 @@ class NRMSModel(BaseModel):
 
 
         user_present_with_time = concatenate([user_present, timestamp_input])
-
         #user_present_with_time = user_present
 
         useFastFormer = 3
 
         y = user_present_with_time
+        y = keras.layers.Reshape((403, 1))(y)
+        y = layers.TimeDistributed(layers.Dense(units=400))(y)
+
         if (useFastFormer == 1):
             # This one doesn't work'
             pass
@@ -353,7 +355,7 @@ class NRMSModel(BaseModel):
             qmask=Lambda(lambda x:  K.cast(K.cast(x,'bool'),'float32'))(user_present_with_time)
             y = Fastformer(20,20)([y,y,qmask,qmask])
         else:
-            y = keras.layers.Reshape((1, 403))(y)
+            #y = keras.layers.Reshape((1, 400))(y)
             y = SelfAttention(hparams.head_num, hparams.head_dim, seed=self.seed)([y, y, y])
 
         y = layers.Dropout(hparams.dropout)(y)
