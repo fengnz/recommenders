@@ -4,6 +4,8 @@
 import tensorflow.keras as keras
 from tensorflow.keras import layers
 import tensorflow as tf
+tf.compat.v1.experimental.output_all_intermediates(True)
+import numpy as np
 
 
 from recommenders.models.newsrec.models.base_model import BaseModel
@@ -23,6 +25,165 @@ from keras.optimizers import *
 
 __all__ = ["NRMSModel"]
 
+import os
+import shutil
+
+import tensorflow as tf
+import tensorflow_hub as hub
+import tensorflow_text as text
+from official.nlp import optimization  # to create AdamW optimizer
+
+import matplotlib.pyplot as plt
+
+tf.get_logger().setLevel('ERROR')
+
+#@title Choose a BERT model to fine-tune
+
+bert_model_name = 'small_bert/bert_en_uncased_L-4_H-512_A-8'  #@param ["bert_en_uncased_L-12_H-768_A-12", "bert_en_cased_L-12_H-768_A-12", "bert_multi_cased_L-12_H-768_A-12", "small_bert/bert_en_uncased_L-2_H-128_A-2", "small_bert/bert_en_uncased_L-2_H-256_A-4", "small_bert/bert_en_uncased_L-2_H-512_A-8", "small_bert/bert_en_uncased_L-2_H-768_A-12", "small_bert/bert_en_uncased_L-4_H-128_A-2", "small_bert/bert_en_uncased_L-4_H-256_A-4", "small_bert/bert_en_uncased_L-4_H-512_A-8", "small_bert/bert_en_uncased_L-4_H-768_A-12", "small_bert/bert_en_uncased_L-6_H-128_A-2", "small_bert/bert_en_uncased_L-6_H-256_A-4", "small_bert/bert_en_uncased_L-6_H-512_A-8", "small_bert/bert_en_uncased_L-6_H-768_A-12", "small_bert/bert_en_uncased_L-8_H-128_A-2", "small_bert/bert_en_uncased_L-8_H-256_A-4", "small_bert/bert_en_uncased_L-8_H-512_A-8", "small_bert/bert_en_uncased_L-8_H-768_A-12", "small_bert/bert_en_uncased_L-10_H-128_A-2", "small_bert/bert_en_uncased_L-10_H-256_A-4", "small_bert/bert_en_uncased_L-10_H-512_A-8", "small_bert/bert_en_uncased_L-10_H-768_A-12", "small_bert/bert_en_uncased_L-12_H-128_A-2", "small_bert/bert_en_uncased_L-12_H-256_A-4", "small_bert/bert_en_uncased_L-12_H-512_A-8", "small_bert/bert_en_uncased_L-12_H-768_A-12", "albert_en_base", "electra_small", "electra_base", "experts_pubmed", "experts_wiki_books", "talking-heads_base"]
+
+map_name_to_handle = {
+    'bert_en_uncased_L-12_H-768_A-12':
+        'https://tfhub.dev/tensorflow/bert_en_uncased_L-12_H-768_A-12/3',
+    'bert_en_cased_L-12_H-768_A-12':
+        'https://tfhub.dev/tensorflow/bert_en_cased_L-12_H-768_A-12/3',
+    'bert_multi_cased_L-12_H-768_A-12':
+        'https://tfhub.dev/tensorflow/bert_multi_cased_L-12_H-768_A-12/3',
+    'small_bert/bert_en_uncased_L-2_H-128_A-2':
+        'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-2_H-128_A-2/1',
+    'small_bert/bert_en_uncased_L-2_H-256_A-4':
+        'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-2_H-256_A-4/1',
+    'small_bert/bert_en_uncased_L-2_H-512_A-8':
+        'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-2_H-512_A-8/1',
+    'small_bert/bert_en_uncased_L-2_H-768_A-12':
+        'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-2_H-768_A-12/1',
+    'small_bert/bert_en_uncased_L-4_H-128_A-2':
+        'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-4_H-128_A-2/1',
+    'small_bert/bert_en_uncased_L-4_H-256_A-4':
+        'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-4_H-256_A-4/1',
+    'small_bert/bert_en_uncased_L-4_H-512_A-8':
+        'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-4_H-512_A-8/1',
+    'small_bert/bert_en_uncased_L-4_H-768_A-12':
+        'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-4_H-768_A-12/1',
+    'small_bert/bert_en_uncased_L-6_H-128_A-2':
+        'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-6_H-128_A-2/1',
+    'small_bert/bert_en_uncased_L-6_H-256_A-4':
+        'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-6_H-256_A-4/1',
+    'small_bert/bert_en_uncased_L-6_H-512_A-8':
+        'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-6_H-512_A-8/1',
+    'small_bert/bert_en_uncased_L-6_H-768_A-12':
+        'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-6_H-768_A-12/1',
+    'small_bert/bert_en_uncased_L-8_H-128_A-2':
+        'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-8_H-128_A-2/1',
+    'small_bert/bert_en_uncased_L-8_H-256_A-4':
+        'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-8_H-256_A-4/1',
+    'small_bert/bert_en_uncased_L-8_H-512_A-8':
+        'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-8_H-512_A-8/1',
+    'small_bert/bert_en_uncased_L-8_H-768_A-12':
+        'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-8_H-768_A-12/1',
+    'small_bert/bert_en_uncased_L-10_H-128_A-2':
+        'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-10_H-128_A-2/1',
+    'small_bert/bert_en_uncased_L-10_H-256_A-4':
+        'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-10_H-256_A-4/1',
+    'small_bert/bert_en_uncased_L-10_H-512_A-8':
+        'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-10_H-512_A-8/1',
+    'small_bert/bert_en_uncased_L-10_H-768_A-12':
+        'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-10_H-768_A-12/1',
+    'small_bert/bert_en_uncased_L-12_H-128_A-2':
+        'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-12_H-128_A-2/1',
+    'small_bert/bert_en_uncased_L-12_H-256_A-4':
+        'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-12_H-256_A-4/1',
+    'small_bert/bert_en_uncased_L-12_H-512_A-8':
+        'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-12_H-512_A-8/1',
+    'small_bert/bert_en_uncased_L-12_H-768_A-12':
+        'https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-12_H-768_A-12/1',
+    'albert_en_base':
+        'https://tfhub.dev/tensorflow/albert_en_base/2',
+    'electra_small':
+        'https://tfhub.dev/google/electra_small/2',
+    'electra_base':
+        'https://tfhub.dev/google/electra_base/2',
+    'experts_pubmed':
+        'https://tfhub.dev/google/experts/bert/pubmed/2',
+    'experts_wiki_books':
+        'https://tfhub.dev/google/experts/bert/wiki_books/2',
+    'talking-heads_base':
+        'https://tfhub.dev/tensorflow/talkheads_ggelu_bert_en_base/1',
+}
+
+map_model_to_preprocess = {
+    'bert_en_uncased_L-12_H-768_A-12':
+        'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+    'bert_en_cased_L-12_H-768_A-12':
+        'https://tfhub.dev/tensorflow/bert_en_cased_preprocess/3',
+    'small_bert/bert_en_uncased_L-2_H-128_A-2':
+        'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+    'small_bert/bert_en_uncased_L-2_H-256_A-4':
+        'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+    'small_bert/bert_en_uncased_L-2_H-512_A-8':
+        'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+    'small_bert/bert_en_uncased_L-2_H-768_A-12':
+        'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+    'small_bert/bert_en_uncased_L-4_H-128_A-2':
+        'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+    'small_bert/bert_en_uncased_L-4_H-256_A-4':
+        'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+    'small_bert/bert_en_uncased_L-4_H-512_A-8':
+        'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+    'small_bert/bert_en_uncased_L-4_H-768_A-12':
+        'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+    'small_bert/bert_en_uncased_L-6_H-128_A-2':
+        'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+    'small_bert/bert_en_uncased_L-6_H-256_A-4':
+        'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+    'small_bert/bert_en_uncased_L-6_H-512_A-8':
+        'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+    'small_bert/bert_en_uncased_L-6_H-768_A-12':
+        'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+    'small_bert/bert_en_uncased_L-8_H-128_A-2':
+        'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+    'small_bert/bert_en_uncased_L-8_H-256_A-4':
+        'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+    'small_bert/bert_en_uncased_L-8_H-512_A-8':
+        'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+    'small_bert/bert_en_uncased_L-8_H-768_A-12':
+        'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+    'small_bert/bert_en_uncased_L-10_H-128_A-2':
+        'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+    'small_bert/bert_en_uncased_L-10_H-256_A-4':
+        'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+    'small_bert/bert_en_uncased_L-10_H-512_A-8':
+        'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+    'small_bert/bert_en_uncased_L-10_H-768_A-12':
+        'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+    'small_bert/bert_en_uncased_L-12_H-128_A-2':
+        'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+    'small_bert/bert_en_uncased_L-12_H-256_A-4':
+        'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+    'small_bert/bert_en_uncased_L-12_H-512_A-8':
+        'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+    'small_bert/bert_en_uncased_L-12_H-768_A-12':
+        'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+    'bert_multi_cased_L-12_H-768_A-12':
+        'https://tfhub.dev/tensorflow/bert_multi_cased_preprocess/3',
+    'albert_en_base':
+        'https://tfhub.dev/tensorflow/albert_en_preprocess/3',
+    'electra_small':
+        'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+    'electra_base':
+        'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+    'experts_pubmed':
+        'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+    'experts_wiki_books':
+        'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+    'talking-heads_base':
+        'https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
+}
+
+tfhub_handle_encoder = map_name_to_handle[bert_model_name]
+tfhub_handle_preprocess = map_model_to_preprocess[bert_model_name]
+
+print(f'BERT model selected           : {tfhub_handle_encoder}')
+print(f'Preprocess model auto-selected: {tfhub_handle_preprocess}')
 
 
 class Fastformer(layers.Layer):
@@ -170,8 +331,8 @@ class NRMSModel(BaseModel):
         input_feat = [
             batch_data["clicked_title_batch"],
             batch_data["candidate_title_batch"],
-            tf.convert_to_tensor(batch_data["clicked_title_string_batch"]),
-            tf.convert_to_tensor(batch_data["candidate_title_string_batch"]),
+            np.array(batch_data["clicked_title_string_batch"]),
+            np.array(batch_data["candidate_title_string_batch"]),
         ]
         input_label = batch_data["labels"]
         return input_feat, input_label
@@ -216,17 +377,23 @@ class NRMSModel(BaseModel):
             object: the user encoder of NRMS.
         """
         hparams = self.hparams
-        his_input_title = keras.Input(
-            shape=(hparams.his_size, hparams.title_size), dtype="int32"
+        #his_input_title = keras.Input(
+        #    shape=(hparams.his_size, hparams.title_size), dtype="int32"
+        #)
+
+        his_input_string_title = keras.Input(
+            shape=(hparams.his_size,), dtype=tf.string
         )
 
-        click_title_presents = layers.TimeDistributed(titleencoder)(his_input_title)
-        y = SelfAttention(hparams.head_num, hparams.head_dim, seed=self.seed)(
+        reshaped_his_input_string_title = tf.expand_dims(his_input_string_title, axis=-1)
+
+        click_title_presents = layers.TimeDistributed(titleencoder)(reshaped_his_input_string_title)
+        y = SelfAttention(16, 32, seed=self.seed)(
             [click_title_presents] * 3
         )
         user_present = AttLayer2(hparams.attention_hidden_dim, seed=self.seed)(y)
 
-        model = keras.Model(his_input_title, user_present, name="user_encoder")
+        model = keras.Model(his_input_string_title, user_present, name="user_encoder")
         model.summary()
         return model
 
@@ -244,48 +411,58 @@ class NRMSModel(BaseModel):
             object: the news encoder of NRMS.
         """
         hparams = self.hparams
-        sequences_input_title = keras.Input(shape=(hparams.title_size,), dtype="int32")
+        #sequences_input_title = keras.Input(shape=(hparams.title_size,), dtype="int32")
 
+        sequences_input_string_title = keras.Input(shape=(), dtype=tf.string, name="news_title_input")
 
-        qmask=Lambda(lambda x:  K.cast(K.cast(x,'bool'),'float32'))(sequences_input_title)
+        preprocessing_layer = hub.KerasLayer(tfhub_handle_preprocess, name='preprocessing')
+        encoder_inputs = preprocessing_layer(sequences_input_string_title)
+        encoder = hub.KerasLayer(tfhub_handle_encoder, trainable=True, name='BERT_encoder')
+        outputs = encoder(encoder_inputs)
+        net = outputs['pooled_output']
+        net = tf.keras.layers.Dropout(0.1)(net)
 
-        embedded_sequences_title = embedding_layer(sequences_input_title)
-        print("embedded_sequences_title.shape")
-        print(embedded_sequences_title.shape)
+        #sequences_input_title = net
 
-        y = layers.Dropout(hparams.dropout)(embedded_sequences_title)
+        #qmask=Lambda(lambda x:  K.cast(K.cast(x,'bool'),'float32'))(sequences_input_title)
 
-        print('looks good')
+        #embedded_sequences_title = embedding_layer(sequences_input_title)
+        #print("embedded_sequences_title.shape")
+        #print(embedded_sequences_title.shape)
 
-        useFastFormer = 2
+        #y = layers.Dropout(hparams.dropout)(embedded_sequences_title)
 
-        print('Use Fast Former: ')
-        print(str(useFastFormer))
+        #print('looks good')
 
-        if (useFastFormer == 1):
-            # This one doesn't work'
-            mask = tf.ones([1, 300], dtype=tf.bool)
-            model = FastTransformer(
-                num_tokens = hparams.head_num,
-                dim = hparams.head_dim,
-                depth = 2,
-                max_seq_len = 300,
-                absolute_pos_emb = None, # Absolute positional embeddings
-                mask = mask
-            )
-            # x = tf.experimental.numpy.random.randint(0, 20000, (1, 4096))
-            # fast_former_layer = model(x)
+        #useFastFormer = 2
 
-            y = model(y)
-        elif (useFastFormer == 2):
-            y = Fastformer(20,20)([y,y,qmask,qmask])
-        else:
-            y = SelfAttention(hparams.head_num, hparams.head_dim, seed=self.seed)([y, y, y])
+        #print('Use Fast Former: ')
+        #print(str(useFastFormer))
 
-        y = layers.Dropout(hparams.dropout)(y)
-        pred_title = AttLayer2(hparams.attention_hidden_dim, seed=self.seed)(y)
+        #if (useFastFormer == 1):
+        #    # This one doesn't work'
+        #    mask = tf.ones([1, 300], dtype=tf.bool)
+        #    model = FastTransformer(
+        #        num_tokens = hparams.head_num,
+        #        dim = hparams.head_dim,
+        #        depth = 2,
+        #        max_seq_len = 300,
+        #        absolute_pos_emb = None, # Absolute positional embeddings
+        #        mask = mask
+        #    )
+        #    # x = tf.experimental.numpy.random.randint(0, 20000, (1, 4096))
+        #    # fast_former_layer = model(x)
 
-        model = keras.Model(sequences_input_title, pred_title, name="news_encoder")
+        #    y = model(y)
+        #elif (useFastFormer == 2):
+        #    y = Fastformer(20,20)([y,y,qmask,qmask])
+        #else:
+        #    y = SelfAttention(hparams.head_num, hparams.head_dim, seed=self.seed)([y, y, y])
+
+        #y = layers.Dropout(hparams.dropout)(y)
+        #pred_title = AttLayer2(hparams.attention_hidden_dim, seed=self.seed)(y)
+
+        model = keras.Model(sequences_input_string_title, net, name="news_encoder")
         print(model.summary())
         return model
 
@@ -316,8 +493,19 @@ class NRMSModel(BaseModel):
             ),
             dtype="int32",
         )
+
+        pred_input_title_string_one = keras.Input(
+            shape=(
+                1,
+            ),
+            dtype=tf.string,
+        )
         pred_title_one_reshape = layers.Reshape((hparams.title_size,))(
             pred_input_title_one
+        )
+
+        pred_string_title_one_reshape = layers.Reshape((1,))(
+            pred_input_title_string_one
         )
 
         embedding_layer = layers.Embedding(
@@ -331,9 +519,11 @@ class NRMSModel(BaseModel):
         self.userencoder = self._build_userencoder(titleencoder)
         self.newsencoder = titleencoder
 
-        user_present = self.userencoder(his_input_title)
-        news_present = layers.TimeDistributed(self.newsencoder)(pred_input_title)
-        news_present_one = self.newsencoder(pred_title_one_reshape)
+        reshaped_pred_input_string_title = tf.expand_dims(pred_input_string_title, axis=-1)
+
+        user_present = self.userencoder(his_input_string_title)
+        news_present = layers.TimeDistributed(self.newsencoder)(reshaped_pred_input_string_title)
+        news_present_one = self.newsencoder(pred_string_title_one_reshape)
 
         preds = layers.Dot(axes=-1)([news_present, user_present])
         preds = layers.Activation(activation="softmax")(preds)
@@ -342,7 +532,7 @@ class NRMSModel(BaseModel):
         pred_one = layers.Activation(activation="sigmoid")(pred_one)
 
         model = keras.Model([his_input_title, pred_input_title, his_input_string_title, pred_input_string_title], preds)
-        scorer = keras.Model([his_input_title, pred_input_title_one], pred_one)
+        scorer = keras.Model([his_input_title, pred_input_title_one, his_input_string_title, pred_input_title_string_one], pred_one)
 
         model.summary()
         scorer.summary()
