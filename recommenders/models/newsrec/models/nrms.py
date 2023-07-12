@@ -170,6 +170,8 @@ class NRMSModel(BaseModel):
         input_feat = [
             batch_data["clicked_title_batch"],
             batch_data["candidate_title_batch"],
+            tf.convert_to_tensor(batch_data["clicked_title_string_batch"]),
+            tf.convert_to_tensor(batch_data["candidate_title_string_batch"]),
         ]
         input_label = batch_data["labels"]
         return input_feat, input_label
@@ -303,6 +305,10 @@ class NRMSModel(BaseModel):
         pred_input_title = keras.Input(
             shape=(hparams.npratio + 1, hparams.title_size), dtype="int32"
         )
+
+        his_input_string_title= tf.keras.layers.Input(shape=(hparams.his_size,), dtype=tf.string, name='his_input_text')
+        pred_input_string_title= tf.keras.layers.Input(shape=(hparams.npratio+1,), dtype=tf.string, name='pre_input_text')
+
         pred_input_title_one = keras.Input(
             shape=(
                 1,
@@ -335,7 +341,7 @@ class NRMSModel(BaseModel):
         pred_one = layers.Dot(axes=-1)([news_present_one, user_present])
         pred_one = layers.Activation(activation="sigmoid")(pred_one)
 
-        model = keras.Model([his_input_title, pred_input_title], preds)
+        model = keras.Model([his_input_title, pred_input_title, his_input_string_title, pred_input_string_title], preds)
         scorer = keras.Model([his_input_title, pred_input_title_one], pred_one)
 
         model.summary()

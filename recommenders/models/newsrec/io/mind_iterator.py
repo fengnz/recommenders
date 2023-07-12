@@ -73,7 +73,9 @@ class MINDIterator(BaseIterator):
         """
 
         self.nid2index = {}
+        self.news_title = [""]
         news_title = [""]
+
 
         with tf.io.gfile.GFile(news_file, "r") as rd:
             for line in rd:
@@ -85,6 +87,7 @@ class MINDIterator(BaseIterator):
                     continue
 
                 self.nid2index[nid] = len(self.nid2index) + 1
+                self.news_title.append(title)
                 title = word_tokenize(title)
                 news_title.append(title)
 
@@ -161,11 +164,18 @@ class MINDIterator(BaseIterator):
                 candidate_title_index = []
                 impr_index = []
                 user_index = []
+                candidate_title = []
+                click_title = []
                 label = [1] + [0] * self.npratio
 
                 n = newsample(negs, self.npratio)
                 candidate_title_index = self.news_title_index[[p] + n]
-                click_title_index = self.news_title_index[self.histories[line]]
+                candidate_title.append(self.news_title[p])
+                for i in n:
+                    candidate_title.append(self.news_title[i])
+                    click_title_index = self.news_title_index[self.histories[line]]
+                for i in self.histories[line]:
+                    click_title.append(self.news_title[i])
                 impr_index.append(self.impr_indexes[line])
                 user_index.append(self.uindexes[line])
 
@@ -175,6 +185,8 @@ class MINDIterator(BaseIterator):
                     user_index,
                     candidate_title_index,
                     click_title_index,
+                    candidate_title,
+                    click_title
                 )
 
         else:
@@ -185,6 +197,8 @@ class MINDIterator(BaseIterator):
                 candidate_title_index = []
                 impr_index = []
                 user_index = []
+                candidate_title = []
+                click_title = []
                 label = [label]
 
                 candidate_title_index.append(self.news_title_index[news])
@@ -222,6 +236,8 @@ class MINDIterator(BaseIterator):
         user_indexes = []
         candidate_title_indexes = []
         click_title_indexes = []
+        candidate_titles = []
+        click_titles = []
         cnt = 0
 
         indexes = np.arange(len(self.labels))
@@ -236,9 +252,13 @@ class MINDIterator(BaseIterator):
                 user_index,
                 candidate_title_index,
                 click_title_index,
+                candidate_title,
+                click_title,
             ) in self.parser_one_line(index):
                 candidate_title_indexes.append(candidate_title_index)
                 click_title_indexes.append(click_title_index)
+                candidate_titles.append(candidate_title)
+                click_titles.append(click_title)
                 imp_indexes.append(imp_index)
                 user_indexes.append(user_index)
                 label_list.append(label)
@@ -251,12 +271,16 @@ class MINDIterator(BaseIterator):
                         user_indexes,
                         candidate_title_indexes,
                         click_title_indexes,
+                        candidate_titles,
+                        click_titles,
                     )
                     label_list = []
                     imp_indexes = []
                     user_indexes = []
                     candidate_title_indexes = []
                     click_title_indexes = []
+                    candidate_titles = []
+                    click_titles = []
                     cnt = 0
 
         if cnt > 0:
@@ -266,6 +290,8 @@ class MINDIterator(BaseIterator):
                 user_indexes,
                 candidate_title_indexes,
                 click_title_indexes,
+                candidate_titles,
+                click_titles
             )
 
     def _convert_data(
@@ -275,6 +301,8 @@ class MINDIterator(BaseIterator):
         user_indexes,
         candidate_title_indexes,
         click_title_indexes,
+        candidate_titles,
+        click_titles
     ):
         """Convert data into numpy arrays that are good for further model operation.
 
@@ -302,6 +330,8 @@ class MINDIterator(BaseIterator):
             "clicked_title_batch": click_title_index_batch,
             "candidate_title_batch": candidate_title_index_batch,
             "labels": labels,
+            "candidate_title_string_batch": candidate_titles,
+            "clicked_title_string_batch": click_titles,
         }
 
     def load_user_from_file(self, news_file, behavior_file):
