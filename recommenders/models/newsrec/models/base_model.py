@@ -75,6 +75,16 @@ class BaseModel:
         self.train_optimizer = self._get_opt()
 
         self.model.compile(loss=self.loss, optimizer=self.train_optimizer)
+ 
+        #lr = self.hparams.learning_rate
+        #from official.nlp import optimization
+        #optimizer = optimization.create_optimizer(init_lr=lr,
+        #                                          num_train_steps=1000,
+        #                                          num_warmup_steps=100,
+        #                                          optimizer_type='adamw')
+
+        #self.model.compile(loss=self.loss, optimizer=optimizer)
+
 
     def _init_embedding(self, file_path):
         """Load pre-trained embeddings as a constant tensor.

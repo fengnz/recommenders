@@ -331,8 +331,8 @@ class NRMSModel(BaseModel):
         input_feat = [
             batch_data["clicked_title_batch"],
             batch_data["candidate_title_batch"],
-            np.array(batch_data["clicked_title_string_batch"]),
-            np.array(batch_data["candidate_title_string_batch"]),
+            tf.convert_to_tensor(batch_data["clicked_title_string_batch"]),
+            tf.convert_to_tensor(batch_data["candidate_title_string_batch"]),
         ]
         input_label = batch_data["labels"]
         return input_feat, input_label
