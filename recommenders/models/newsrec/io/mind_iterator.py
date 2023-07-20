@@ -205,6 +205,8 @@ class MINDIterator(BaseIterator):
                 click_title_index = self.news_title_index[self.histories[line]]
                 impr_index.append(self.impr_indexes[line])
                 user_index.append(self.uindexes[line])
+                candidate_title.append(self.news_title[news])
+                click_title.append(self.news_title[news])
 
                 yield (
                     label,
@@ -212,6 +214,8 @@ class MINDIterator(BaseIterator):
                     user_index,
                     candidate_title_index,
                     click_title_index,
+                    candidate_title,
+                    click_title
                 )
 
     def load_data_from_file(self, news_file, behavior_file):
@@ -420,17 +424,21 @@ class MINDIterator(BaseIterator):
 
         news_indexes = []
         candidate_title_indexes = []
+        candidate_title_string_batch = []
+        history_title_string_batch = []
         cnt = 0
 
         for index in range(len(self.news_title_index)):
             news_indexes.append(index)
             candidate_title_indexes.append(self.news_title_index[index])
+            candidate_title_string_batch.append(self.news_title[index])
 
             cnt += 1
             if cnt >= self.batch_size:
                 yield self._convert_news_data(
                     news_indexes,
                     candidate_title_indexes,
+                    candidate_title_string_batch,
                 )
                 news_indexes = []
                 candidate_title_indexes = []
@@ -440,12 +448,14 @@ class MINDIterator(BaseIterator):
             yield self._convert_news_data(
                 news_indexes,
                 candidate_title_indexes,
+                candidate_title_string_batch,
             )
 
     def _convert_news_data(
         self,
         news_indexes,
         candidate_title_indexes,
+        candidate_title_string_batch,
     ):
         """Convert data into numpy arrays that are good for further model operation.
 
@@ -465,6 +475,7 @@ class MINDIterator(BaseIterator):
         return {
             "news_index_batch": news_indexes_batch,
             "candidate_title_batch": candidate_title_index_batch,
+            "candidate_title_string_batch": np.array(candidate_title_string_batch),
         }
 
     def load_impression_from_file(self, behaivors_file):

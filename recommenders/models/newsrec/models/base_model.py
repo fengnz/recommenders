@@ -10,7 +10,7 @@ from tensorflow.compat.v1 import keras
 
 from recommenders.models.deeprec.deeprec_utils import cal_metric
 
-tf.compat.v1.disable_eager_execution()
+#tf.compat.v1.disable_eager_execution()
 tf.compat.v1.experimental.output_all_intermediates(True)
 __all__ = ["BaseModel"]
 

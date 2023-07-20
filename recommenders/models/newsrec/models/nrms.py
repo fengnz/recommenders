@@ -10,12 +10,12 @@ import numpy as np
 
 from recommenders.models.newsrec.models.base_model import BaseModel
 from recommenders.models.newsrec.models.layers import AttLayer2, SelfAttention
-from fast_transformer import FastTransformer
+#from fast_transformer import FastTransformer
 
 from keras import backend as K
 from keras.layers import Lambda
 
-from keras.utils.np_utils import to_categorical
+#from keras.utils.np_utils import to_categorical
 from keras.layers import *
 from keras.models import Model, load_model
 from keras import backend as K
@@ -31,7 +31,7 @@ import shutil
 import tensorflow as tf
 import tensorflow_hub as hub
 import tensorflow_text as text
-from official.nlp import optimization  # to create AdamW optimizer
+#from official.nlp import optimization  # to create AdamW optimizer
 
 import matplotlib.pyplot as plt
 
@@ -331,8 +331,8 @@ class NRMSModel(BaseModel):
         input_feat = [
             batch_data["clicked_title_batch"],
             batch_data["candidate_title_batch"],
-            tf.convert_to_tensor(batch_data["clicked_title_string_batch"]),
-            tf.convert_to_tensor(batch_data["candidate_title_string_batch"]),
+            np.array(batch_data["clicked_title_string_batch"]),
+            np.array(batch_data["candidate_title_string_batch"]),
         ]
         input_label = batch_data["labels"]
         return input_feat, input_label
@@ -355,7 +355,7 @@ class NRMSModel(BaseModel):
         Returns:
             numpy.ndarray: input news feature (candidate title batch)
         """
-        return batch_data["candidate_title_batch"]
+        return batch_data["candidate_title_string_batch"]
 
     def _build_graph(self):
         """Build NRMS model and scorer.
