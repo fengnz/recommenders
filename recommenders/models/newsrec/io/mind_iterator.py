@@ -358,10 +358,14 @@ class MINDIterator(BaseIterator):
         user_indexes = []
         impr_indexes = []
         click_title_indexes = []
+        click_title_string_batch = []
         cnt = 0
 
         for index in range(len(self.impr_indexes)):
             click_title_indexes.append(self.news_title_index[self.histories[index]])
+            for i in self.histories[index]:
+                click_title_string_batch.append(self.news_title[i])
+
             user_indexes.append(self.uindexes[index])
             impr_indexes.append(self.impr_indexes[index])
 
@@ -371,10 +375,12 @@ class MINDIterator(BaseIterator):
                     user_indexes,
                     impr_indexes,
                     click_title_indexes,
+                    click_title_string_batch
                 )
                 user_indexes = []
                 impr_indexes = []
                 click_title_indexes = []
+                click_title_string_batch = []
                 cnt = 0
 
         if cnt > 0:
@@ -382,6 +388,7 @@ class MINDIterator(BaseIterator):
                 user_indexes,
                 impr_indexes,
                 click_title_indexes,
+                click_title_string_batch,
             )
 
     def _convert_user_data(
@@ -389,6 +396,7 @@ class MINDIterator(BaseIterator):
         user_indexes,
         impr_indexes,
         click_title_indexes,
+        click_title_string_batch,
     ):
         """Convert data into numpy arrays that are good for further model operation.
 
@@ -408,6 +416,7 @@ class MINDIterator(BaseIterator):
             "user_index_batch": user_indexes,
             "impr_index_batch": impr_indexes,
             "clicked_title_batch": click_title_index_batch,
+            "clicked_title_string_batch": np.array(click_title_string_batch),
         }
 
     def load_news_from_file(self, news_file):
@@ -442,6 +451,7 @@ class MINDIterator(BaseIterator):
                 )
                 news_indexes = []
                 candidate_title_indexes = []
+                candidate_title_string_batch = []
                 cnt = 0
 
         if cnt > 0:

@@ -345,7 +345,7 @@ class NRMSModel(BaseModel):
         Returns:
             numpy.ndarray: input user feature (clicked title batch)
         """
-        return batch_data["clicked_title_batch"]
+        return batch_data["clicked_title_string_batch"]
 
     def _get_news_feature_from_iter(self, batch_data):
         """get input of news encoder
