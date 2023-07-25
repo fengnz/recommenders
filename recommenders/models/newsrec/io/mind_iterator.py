@@ -98,6 +98,8 @@ class MINDIterator(BaseIterator):
 
         # convert news_title list to ndarray
         self.news_title = np.asarray(self.news_title)
+        print("the news title shape is ")
+        print(self.news_title.shape)
 
         for news_index in range(len(news_title)):
             title = news_title[news_index]
@@ -107,6 +109,8 @@ class MINDIterator(BaseIterator):
                         title[word_index].lower()
                     ]
 
+        print("the news title index shape is ")
+        print(self.news_title_index.shape)
     def init_behaviors(self, behaviors_file):
         """init behavior logs given behaviors file.
 
@@ -177,11 +181,23 @@ class MINDIterator(BaseIterator):
                 candidate_title.append(self.news_title[p])
                 for i in n:
                     candidate_title.append(self.news_title[i])
-                    click_title_index = self.news_title_index[self.histories[line]]
+                click_title_index = self.news_title_index[self.histories[line]]
                 for i in self.histories[line]:
                     click_title.append(self.news_title[i])
                 impr_index.append(self.impr_indexes[line])
                 user_index.append(self.uindexes[line])
+
+                candidate_title = np.asarray(candidate_title)
+                click_title = np.asarray(click_title)
+
+                print("candidate_title_index shape")
+                print(candidate_title_index.shape)
+                print("click_title_index shape")
+                print(click_title_index.shape)
+                print("candidate_title shape")
+                print(candidate_title.shape)
+                print("click_title shape <====")
+                print(click_title.shape)
 
                 yield (
                     label,
@@ -202,15 +218,14 @@ class MINDIterator(BaseIterator):
                 impr_index = []
                 user_index = []
                 candidate_title = []
-                click_title = []
                 label = [label]
 
                 candidate_title_index.append(self.news_title_index[news])
+                candidate_title.append(self.news_title[news])
                 click_title_index = self.news_title_index[self.histories[line]]
                 impr_index.append(self.impr_indexes[line])
                 user_index.append(self.uindexes[line])
-                candidate_title.append(self.news_title[news])
-                click_title.append(self.news_title[news])
+                click_title = self.news_title[self.histories[line]]
 
                 yield (
                     label,
@@ -338,8 +353,8 @@ class MINDIterator(BaseIterator):
             "clicked_title_batch": click_title_index_batch,
             "candidate_title_batch": candidate_title_index_batch,
             "labels": labels,
-            "candidate_title_string_batch": candidate_titles,
-            "clicked_title_string_batch": click_titles,
+            "candidate_title_string_batch": np.asarray(candidate_titles),
+            "clicked_title_string_batch": np.asarray(click_titles),
         }
 
     def load_user_from_file(self, news_file, behavior_file):
@@ -421,7 +436,7 @@ class MINDIterator(BaseIterator):
             "user_index_batch": user_indexes,
             "impr_index_batch": impr_indexes,
             "clicked_title_batch": click_title_index_batch,
-            "clicked_title_string_batch": np.array(click_title_string_batch),
+            "clicked_title_string_batch": np.asarray(click_title_string_batch),
         }
 
     def load_news_from_file(self, news_file):
@@ -439,7 +454,6 @@ class MINDIterator(BaseIterator):
         news_indexes = []
         candidate_title_indexes = []
         candidate_title_string_batch = []
-        history_title_string_batch = []
         cnt = 0
 
         for index in range(len(self.news_title_index)):
@@ -490,7 +504,7 @@ class MINDIterator(BaseIterator):
         return {
             "news_index_batch": news_indexes_batch,
             "candidate_title_batch": candidate_title_index_batch,
-            "candidate_title_string_batch": np.array(candidate_title_string_batch),
+            "candidate_title_string_batch": np.asarray(candidate_title_string_batch),
         }
 
     def load_impression_from_file(self, behaivors_file):
