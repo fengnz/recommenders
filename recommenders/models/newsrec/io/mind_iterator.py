@@ -95,6 +95,10 @@ class MINDIterator(BaseIterator):
             (len(news_title), self.title_size), dtype="int32"
         )
 
+
+        # convert news_title list to ndarray
+        self.news_title = np.asarray(self.news_title)
+
         for news_index in range(len(news_title)):
             title = news_title[news_index]
             for word_index in range(min(self.title_size, len(title))):
@@ -363,8 +367,9 @@ class MINDIterator(BaseIterator):
 
         for index in range(len(self.impr_indexes)):
             click_title_indexes.append(self.news_title_index[self.histories[index]])
-            for i in self.histories[index]:
-                click_title_string_batch.append(self.news_title[i])
+            click_title_string_batch.append(self.news_title[self.histories[index]])
+            # for i in self.histories[index]:
+            #     click_title_string_batch.append(self.news_title[i])
 
             user_indexes.append(self.uindexes[index])
             impr_indexes.append(self.impr_indexes[index])
