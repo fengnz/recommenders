@@ -7,6 +7,9 @@ import pickle
 
 from recommenders.models.deeprec.io.iterator import BaseIterator
 from recommenders.models.newsrec.newsrec_utils import word_tokenize, newsample
+import tensorflow_hub as hub
+
+from recommenders.models.newsrec.io.bert_model import bert_preprocess_model, bert_model
 
 __all__ = ["MINDIterator"]
 
@@ -30,11 +33,11 @@ class MINDIterator(BaseIterator):
     """
 
     def __init__(
-        self,
-        hparams,
-        npratio=-1,
-        col_spliter="\t",
-        ID_spliter="%",
+            self,
+            hparams,
+            npratio=-1,
+            col_spliter="\t",
+            ID_spliter="%",
     ):
         """Initialize an iterator. Create necessary placeholders for the model.
 
@@ -76,6 +79,38 @@ class MINDIterator(BaseIterator):
         self.news_title = [""]
         news_title = [""]
 
+        text_test = ['this is such an amazing movie!']
+        text_test = text_test
+        text_preprocessed = bert_preprocess_model(text_test)
+
+        print(f'Keys       : {list(text_preprocessed.keys())}')
+        print(f'Shape      : {text_preprocessed["input_word_ids"].shape}')
+        print(f'Word Ids   : {text_preprocessed["input_word_ids"][0, :12]}')
+        print(f'Input Mask : {text_preprocessed["input_mask"][0, :12]}')
+        print(f'Type Ids   : {text_preprocessed["input_type_ids"][0, :12]}')
+
+        bert_results = bert_model(text_preprocessed)
+
+        print(f'Pooled Outputs Shape:{bert_results["pooled_output"].shape}')
+        print(f'Pooled Outputs Values:{bert_results["pooled_output"][0, :12]}')
+        print(f'Sequence Outputs Shape:{bert_results["sequence_output"].shape}')
+        print(f'Sequence Outputs Values:{bert_results["sequence_output"][0, :12]}')
+
+        self.news_title_bert_index = bert_results["pooled_output"]
+
+        self.news_title_bert_index = np.asarray(self.news_title_bert_index)
+
+        np.save('data.npy', self.news_title_bert_index)
+        count = 0
+
+        batch_size_for_bert = 128
+        batch_count_for_bert = 0;
+        title_batch_prepared_for_bert = [];
+
+        use_saved_bert = True
+
+        if use_saved_bert:
+            self.news_title_bert_index = np.load(news_file + "_bert_index.npy")
 
         with tf.io.gfile.GFile(news_file, "r") as rd:
             for line in rd:
@@ -88,18 +123,81 @@ class MINDIterator(BaseIterator):
 
                 self.nid2index[nid] = len(self.nid2index) + 1
                 self.news_title.append(title)
+                # text_preprocessed = bert_preprocess_model([title])
+                # bert_results = bert_model(text_preprocessed)
+                # bert_title = bert_results["pooled_output"]
+                # print(f'Pooled Outputs Shape:{bert_title.shape}')
+                count = count + 1
+                if not use_saved_bert:
+                    batch_count_for_bert = batch_count_for_bert + 1
+                    title_batch_prepared_for_bert.append(title)
+
+                if len(title_batch_prepared_for_bert) != batch_count_for_bert:
+                    print('fatal error: queue size does not match')
+                    exit()
+
+                if not use_saved_bert and batch_count_for_bert == batch_size_for_bert:
+                    # text queue is full, start process
+                    text_preprocessed = bert_preprocess_model(title_batch_prepared_for_bert)
+                    bert_results = bert_model(text_preprocessed)
+                    bert_title = bert_results["pooled_output"]
+                    print(f'Pooled Outputs Shape:{bert_title.shape}')
+                    # clear the queue
+                    title_batch_prepared_for_bert = []
+                    batch_count_for_bert = 0
+                    print(f'type of self.bert_titles:{type(self.news_title_bert_index)}')
+                    print(f'type of bert title:{type(bert_title)}')
+                    self.news_title_bert_index = np.concatenate((self.news_title_bert_index, bert_title.numpy()),
+                                                                axis=0)
+                    print(f'self bert titles Shape:{self.news_title_bert_index.shape}')
+
+                # print(count)
                 title = word_tokenize(title)
                 news_title.append(title)
+                if count > 500:
+                    pass
+                    # break
+
+        if not use_saved_bert and batch_count_for_bert > 0:
+            print('Finish processing the news file, check the batch queue')
+            print(f'The batch queue still have {len(title_batch_prepared_for_bert)}')
+            if len(title_batch_prepared_for_bert) != batch_count_for_bert:
+                print('fatal error: queue size does not match')
+                exit()
+            # text queue is full, start process
+            text_preprocessed = bert_preprocess_model(title_batch_prepared_for_bert)
+            bert_results = bert_model(text_preprocessed)
+            bert_title = bert_results["pooled_output"]
+            print(f'Pooled Outputs Shape:{bert_title.shape}')
+            # clear the queue
+            title_batch_prepared_for_bert = []
+            batch_count_for_bert = 0
+            print(f'type of self.bert_titles:{type(self.news_title_bert_index)}')
+            print(f'type of bert title:{type(bert_title)}')
+            self.news_title_bert_index = np.concatenate((self.news_title_bert_index, bert_title.numpy()), axis=0)
+            print(f'self bert titles Shape:{self.news_title_bert_index.shape}')
+
+        # convert news_title list to ndarray
+        self.news_title = np.asarray(self.news_title)
+        # file_path = 'output.txt'
+
+        # Save the array to a text file
+        # with open(file_path, 'w') as f:
+        #     for item in self.news_title:
+        #         f.write("%s\n" % item)
+
+        print("the news title shape is ")
+        print(self.news_title.shape)
+
+        print("the bert title shape is ")
+        print(self.news_title_bert_index.shape)
+
+        if not use_saved_bert:
+            np.save(news_file + "_bert_index", self.news_title_bert_index)
 
         self.news_title_index = np.zeros(
             (len(news_title), self.title_size), dtype="int32"
         )
-
-
-        # convert news_title list to ndarray
-        self.news_title = np.asarray(self.news_title)
-        print("the news title shape is ")
-        print(self.news_title.shape)
 
         for news_index in range(len(news_title)):
             title = news_title[news_index]
@@ -111,6 +209,7 @@ class MINDIterator(BaseIterator):
 
         print("the news title index shape is ")
         print(self.news_title_index.shape)
+
     def init_behaviors(self, behaviors_file):
         """init behavior logs given behaviors file.
 
@@ -130,8 +229,8 @@ class MINDIterator(BaseIterator):
 
                 history = [self.nid2index[i] for i in history.split()]
                 history = [0] * (self.his_size - len(history)) + history[
-                    : self.his_size
-                ]
+                                                                 : self.his_size
+                                                                 ]
 
                 impr_news = [self.nid2index[i.split("-")[0]] for i in impr.split()]
                 label = [int(i.split("-")[1]) for i in impr.split()]
@@ -178,10 +277,12 @@ class MINDIterator(BaseIterator):
 
                 n = newsample(negs, self.npratio)
                 candidate_title_index = self.news_title_index[[p] + n]
+                candidate_title_bert_index = self.news_title_bert_index[[p] + n]
                 candidate_title.append(self.news_title[p])
                 for i in n:
                     candidate_title.append(self.news_title[i])
                 click_title_index = self.news_title_index[self.histories[line]]
+                click_title_bert_index = self.news_title_bert_index[self.histories[line]]
                 for i in self.histories[line]:
                     click_title.append(self.news_title[i])
                 impr_index.append(self.impr_indexes[line])
@@ -190,21 +291,23 @@ class MINDIterator(BaseIterator):
                 candidate_title = np.asarray(candidate_title)
                 click_title = np.asarray(click_title)
 
-                print("candidate_title_index shape")
-                print(candidate_title_index.shape)
-                print("click_title_index shape")
-                print(click_title_index.shape)
-                print("candidate_title shape")
-                print(candidate_title.shape)
-                print("click_title shape <====")
-                print(click_title.shape)
-
+                # print("candidate_title_index shape")
+                # print(candidate_title_index.shape)
+                # print("click_title_index shape")
+                # print(click_title_index.shape)
+                # print("candidate_title shape")
+                # print(candidate_title.shape)
+                # print("click_title shape <====")
+                # print(click_title.shape)
+                #
                 yield (
                     label,
                     impr_index,
                     user_index,
                     candidate_title_index,
                     click_title_index,
+                    candidate_title_bert_index,
+                    click_title_bert_index,
                     candidate_title,
                     click_title
                 )
@@ -215,14 +318,17 @@ class MINDIterator(BaseIterator):
 
             for news, label in zip(impr, impr_label):
                 candidate_title_index = []
+                candidate_title_bert_index = []
                 impr_index = []
                 user_index = []
                 candidate_title = []
                 label = [label]
 
                 candidate_title_index.append(self.news_title_index[news])
+                candidate_title_bert_index.append(self.news_title_bert_index[news])
                 candidate_title.append(self.news_title[news])
                 click_title_index = self.news_title_index[self.histories[line]]
+                click_title_bert_index = self.news_title_bert_index[self.histories[line]]
                 impr_index.append(self.impr_indexes[line])
                 user_index.append(self.uindexes[line])
                 click_title = self.news_title[self.histories[line]]
@@ -233,6 +339,8 @@ class MINDIterator(BaseIterator):
                     user_index,
                     candidate_title_index,
                     click_title_index,
+                    candidate_title_bert_index,
+                    click_title_bert_index,
                     candidate_title,
                     click_title
                 )
@@ -259,6 +367,8 @@ class MINDIterator(BaseIterator):
         user_indexes = []
         candidate_title_indexes = []
         click_title_indexes = []
+        candidate_title_bert_indexes = []
+        click_title_bert_indexes = []
         candidate_titles = []
         click_titles = []
         cnt = 0
@@ -270,16 +380,20 @@ class MINDIterator(BaseIterator):
 
         for index in indexes:
             for (
-                label,
-                imp_index,
-                user_index,
-                candidate_title_index,
-                click_title_index,
-                candidate_title,
-                click_title,
+                    label,
+                    imp_index,
+                    user_index,
+                    candidate_title_index,
+                    click_title_index,
+                    candidate_title_bert_index,
+                    click_title_bert_index,
+                    candidate_title,
+                    click_title,
             ) in self.parser_one_line(index):
                 candidate_title_indexes.append(candidate_title_index)
                 click_title_indexes.append(click_title_index)
+                candidate_title_bert_indexes.append(candidate_title_bert_index)
+                click_title_bert_indexes.append(click_title_bert_index)
                 candidate_titles.append(candidate_title)
                 click_titles.append(click_title)
                 imp_indexes.append(imp_index)
@@ -294,6 +408,8 @@ class MINDIterator(BaseIterator):
                         user_indexes,
                         candidate_title_indexes,
                         click_title_indexes,
+                        candidate_title_bert_indexes,
+                        click_title_bert_indexes,
                         candidate_titles,
                         click_titles,
                     )
@@ -302,6 +418,8 @@ class MINDIterator(BaseIterator):
                     user_indexes = []
                     candidate_title_indexes = []
                     click_title_indexes = []
+                    candidate_title_bert_indexes = []
+                    click_title_bert_indexes = []
                     candidate_titles = []
                     click_titles = []
                     cnt = 0
@@ -313,19 +431,23 @@ class MINDIterator(BaseIterator):
                 user_indexes,
                 candidate_title_indexes,
                 click_title_indexes,
+                candidate_title_bert_indexes,
+                click_title_bert_indexes,
                 candidate_titles,
                 click_titles
             )
 
     def _convert_data(
-        self,
-        label_list,
-        imp_indexes,
-        user_indexes,
-        candidate_title_indexes,
-        click_title_indexes,
-        candidate_titles,
-        click_titles
+            self,
+            label_list,
+            imp_indexes,
+            user_indexes,
+            candidate_title_indexes,
+            click_title_indexes,
+            candidate_title_bert_indexes,
+            click_title_bert_indexes,
+            candidate_titles,
+            click_titles
     ):
         """Convert data into numpy arrays that are good for further model operation.
 
@@ -347,11 +469,17 @@ class MINDIterator(BaseIterator):
             candidate_title_indexes, dtype=np.int64
         )
         click_title_index_batch = np.asarray(click_title_indexes, dtype=np.int64)
+        candidate_title_bert_index_batch = np.asarray(
+            candidate_title_bert_indexes, dtype=np.int64
+        )
+        click_title_bert_index_batch = np.asarray(click_title_bert_indexes, dtype=np.int64)
         return {
             "impression_index_batch": imp_indexes,
             "user_index_batch": user_indexes,
             "clicked_title_batch": click_title_index_batch,
             "candidate_title_batch": candidate_title_index_batch,
+            "clicked_title_bert_batch": click_title_bert_index_batch,
+            "candidate_title_bert_batch": candidate_title_bert_index_batch,
             "labels": labels,
             "candidate_title_string_batch": np.asarray(candidate_titles),
             "clicked_title_string_batch": np.asarray(click_titles),
@@ -377,11 +505,13 @@ class MINDIterator(BaseIterator):
         user_indexes = []
         impr_indexes = []
         click_title_indexes = []
+        click_title_bert_indexes = []
         click_title_string_batch = []
         cnt = 0
 
         for index in range(len(self.impr_indexes)):
             click_title_indexes.append(self.news_title_index[self.histories[index]])
+            click_title_bert_indexes.append(self.news_title_bert_index[self.histories[index]])
             click_title_string_batch.append(self.news_title[self.histories[index]])
             # for i in self.histories[index]:
             #     click_title_string_batch.append(self.news_title[i])
@@ -395,11 +525,13 @@ class MINDIterator(BaseIterator):
                     user_indexes,
                     impr_indexes,
                     click_title_indexes,
+                    click_title_bert_indexes,
                     click_title_string_batch
                 )
                 user_indexes = []
                 impr_indexes = []
                 click_title_indexes = []
+                click_title_bert_indexes = []
                 click_title_string_batch = []
                 cnt = 0
 
@@ -408,15 +540,17 @@ class MINDIterator(BaseIterator):
                 user_indexes,
                 impr_indexes,
                 click_title_indexes,
+                click_title_bert_indexes,
                 click_title_string_batch,
             )
 
     def _convert_user_data(
-        self,
-        user_indexes,
-        impr_indexes,
-        click_title_indexes,
-        click_title_string_batch,
+            self,
+            user_indexes,
+            impr_indexes,
+            click_title_indexes,
+            click_title_bert_indexes,
+            click_title_string_batch,
     ):
         """Convert data into numpy arrays that are good for further model operation.
 
@@ -431,11 +565,13 @@ class MINDIterator(BaseIterator):
         user_indexes = np.asarray(user_indexes, dtype=np.int32)
         impr_indexes = np.asarray(impr_indexes, dtype=np.int32)
         click_title_index_batch = np.asarray(click_title_indexes, dtype=np.int64)
+        click_title_bert_index_batch = np.asarray(click_title_bert_indexes, dtype=np.int64)
 
         return {
             "user_index_batch": user_indexes,
             "impr_index_batch": impr_indexes,
             "clicked_title_batch": click_title_index_batch,
+            "clicked_title_bert_batch": click_title_bert_index_batch,
             "clicked_title_string_batch": np.asarray(click_title_string_batch),
         }
 
@@ -453,12 +589,14 @@ class MINDIterator(BaseIterator):
 
         news_indexes = []
         candidate_title_indexes = []
+        candidate_title_bert_indexes = []
         candidate_title_string_batch = []
         cnt = 0
 
         for index in range(len(self.news_title_index)):
             news_indexes.append(index)
             candidate_title_indexes.append(self.news_title_index[index])
+            candidate_title_bert_indexes.append(self.news_title_bert_index[index])
             candidate_title_string_batch.append(self.news_title[index])
 
             cnt += 1
@@ -466,10 +604,12 @@ class MINDIterator(BaseIterator):
                 yield self._convert_news_data(
                     news_indexes,
                     candidate_title_indexes,
+                    candidate_title_bert_indexes,
                     candidate_title_string_batch,
                 )
                 news_indexes = []
                 candidate_title_indexes = []
+                candidate_title_bert_indexes = []
                 candidate_title_string_batch = []
                 cnt = 0
 
@@ -477,14 +617,16 @@ class MINDIterator(BaseIterator):
             yield self._convert_news_data(
                 news_indexes,
                 candidate_title_indexes,
+                candidate_title_bert_indexes,
                 candidate_title_string_batch,
             )
 
     def _convert_news_data(
-        self,
-        news_indexes,
-        candidate_title_indexes,
-        candidate_title_string_batch,
+            self,
+            news_indexes,
+            candidate_title_indexes,
+            candidate_title_bert_indexes,
+            candidate_title_string_batch,
     ):
         """Convert data into numpy arrays that are good for further model operation.
 
@@ -504,6 +646,7 @@ class MINDIterator(BaseIterator):
         return {
             "news_index_batch": news_indexes_batch,
             "candidate_title_batch": candidate_title_index_batch,
+            "candidate_title_bert_batch": np.asarray(candidate_title_bert_indexes),
             "candidate_title_string_batch": np.asarray(candidate_title_string_batch),
         }
 

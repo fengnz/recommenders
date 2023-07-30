@@ -331,8 +331,10 @@ class NRMSModel(BaseModel):
         input_feat = [
             batch_data["clicked_title_batch"],
             batch_data["candidate_title_batch"],
-            np.asarray(batch_data["clicked_title_string_batch"]),
-            np.asarray(batch_data["candidate_title_string_batch"]),
+            batch_data["clicked_title_bert_batch"],
+            batch_data["candidate_title_bert_batch"],
+            # np.asarray(batch_data["clicked_title_string_batch"]),
+            # np.asarray(batch_data["candidate_title_string_batch"]),
         ]
         input_label = batch_data["labels"]
         return input_feat, input_label
@@ -345,7 +347,8 @@ class NRMSModel(BaseModel):
         Returns:
             numpy.ndarray: input user feature (clicked title batch)
         """
-        return batch_data["clicked_title_string_batch"]
+        # return batch_data["clicked_title_string_batch"]
+        return batch_data["clicked_title_bert_batch"]
 
     def _get_news_feature_from_iter(self, batch_data):
         """get input of news encoder
@@ -355,7 +358,7 @@ class NRMSModel(BaseModel):
         Returns:
             numpy.ndarray: input news feature (candidate title batch)
         """
-        return batch_data["candidate_title_string_batch"]
+        return batch_data["candidate_title_bert_batch"]
 
     def _build_graph(self):
         """Build NRMS model and scorer.
@@ -381,26 +384,27 @@ class NRMSModel(BaseModel):
         #    shape=(hparams.his_size, hparams.title_size), dtype="int32"
         #)
 
-        his_input_string_title = keras.Input(
-            shape=(hparams.his_size,), dtype=tf.string
+        his_input_title_bert = keras.Input(
+           shape=(hparams.his_size, 512), dtype="int32"
         )
 
-        reshaped_his_input_string_title = tf.expand_dims(his_input_string_title, axis=-1)
+        # his_input_string_title = keras.Input(
+        #     shape=(hparams.his_size,), dtype=tf.string
+        # )
+        #
+        # reshaped_his_input_string_title = tf.expand_dims(his_input_string_title, axis=-1)
 
-        click_title_presents = layers.TimeDistributed(titleencoder)(reshaped_his_input_string_title)
+        click_title_presents = layers.TimeDistributed(titleencoder)(his_input_title_bert)
         y = SelfAttention(16, 32, seed=self.seed)(
             [click_title_presents] * 3
         )
         user_present = AttLayer2(hparams.attention_hidden_dim, seed=self.seed)(y)
 
-        model = keras.Model(his_input_string_title, user_present, name="user_encoder")
+        model = keras.Model(his_input_title_bert, user_present, name="user_encoder")
         model.summary()
         return model
 
     def _build_newsencoder(self, embedding_layer):
-
-
-
 
         """The main function to create news encoder of NRMS.
 
@@ -411,16 +415,23 @@ class NRMSModel(BaseModel):
             object: the news encoder of NRMS.
         """
         hparams = self.hparams
-        #sequences_input_title = keras.Input(shape=(hparams.title_size,), dtype="int32")
+        sequences_input_title = keras.Input(shape=(512,), dtype="int32", name="news_title_bert_input")
 
-        sequences_input_string_title = keras.Input(shape=(), dtype=tf.string, name="news_title_input")
+        use_bert = False
 
-        preprocessing_layer = hub.KerasLayer(tfhub_handle_preprocess, name='preprocessing')
-        encoder_inputs = preprocessing_layer(sequences_input_string_title)
-        encoder = hub.KerasLayer(tfhub_handle_encoder, trainable=True, name='BERT_encoder')
-        outputs = encoder(encoder_inputs)
-        net = outputs['pooled_output']
-        net = tf.keras.layers.Dropout(0.1)(net)
+        if use_bert:
+            sequences_input_string_title = keras.Input(shape=(), dtype=tf.string, name="news_title_input")
+            preprocessing_layer = hub.KerasLayer(tfhub_handle_preprocess, name='preprocessing')
+            encoder_inputs = preprocessing_layer(sequences_input_string_title)
+            encoder = hub.KerasLayer(tfhub_handle_encoder, trainable=True, name='BERT_encoder')
+            outputs = encoder(encoder_inputs)
+            net = outputs['pooled_output']
+            net = tf.keras.layers.Dropout(0.1)(net)
+
+        else:
+            # the title has been processed by bert, do nothing, just return
+            # convert int 32 to float 32
+            net = tf.keras.layers.Lambda(lambda x: tf.cast(x, 'float32'))(sequences_input_title)
 
         #sequences_input_title = net
 
@@ -462,7 +473,7 @@ class NRMSModel(BaseModel):
         #y = layers.Dropout(hparams.dropout)(y)
         #pred_title = AttLayer2(hparams.attention_hidden_dim, seed=self.seed)(y)
 
-        model = keras.Model(sequences_input_string_title, net, name="news_encoder")
+        model = keras.Model(sequences_input_title, net, name="news_encoder")
         print(model.summary())
         return model
 
@@ -483,13 +494,28 @@ class NRMSModel(BaseModel):
             shape=(hparams.npratio + 1, hparams.title_size), dtype="int32"
         )
 
-        his_input_string_title= tf.keras.layers.Input(shape=(hparams.his_size,), dtype=tf.string, name='his_input_text')
-        pred_input_string_title= tf.keras.layers.Input(shape=(hparams.npratio+1,), dtype=tf.string, name='pre_input_text')
+        his_input_title_bert = keras.Input(
+            shape=(hparams.his_size, 512), dtype="int32"
+        )
+        pred_input_title_bert = keras.Input(
+            shape=(hparams.npratio + 1, 512), dtype="int32"
+        )
+
+        # his_input_string_title= tf.keras.layers.Input(shape=(hparams.his_size,), dtype=tf.string, name='his_input_text')
+        # pred_input_string_title= tf.keras.layers.Input(shape=(hparams.npratio+1,), dtype=tf.string, name='pre_input_text')
 
         pred_input_title_one = keras.Input(
             shape=(
                 1,
                 hparams.title_size,
+            ),
+            dtype="int32",
+        )
+
+        pred_input_title_bert_one = keras.Input(
+            shape=(
+                1,
+                512,
             ),
             dtype="int32",
         )
@@ -502,6 +528,10 @@ class NRMSModel(BaseModel):
         )
         pred_title_one_reshape = layers.Reshape((hparams.title_size,))(
             pred_input_title_one
+        )
+
+        pred_title_bert_one_reshape = layers.Reshape((512,))(
+            pred_input_title_bert_one
         )
 
         pred_string_title_one_reshape = layers.Reshape((1,))(
@@ -519,11 +549,14 @@ class NRMSModel(BaseModel):
         self.userencoder = self._build_userencoder(titleencoder)
         self.newsencoder = titleencoder
 
-        reshaped_pred_input_string_title = tf.expand_dims(pred_input_string_title, axis=-1)
+        # reshaped_pred_input_string_title = tf.expand_dims(pred_input_string_title, axis=-1)
 
-        user_present = self.userencoder(his_input_string_title)
-        news_present = layers.TimeDistributed(self.newsencoder)(reshaped_pred_input_string_title)
-        news_present_one = self.newsencoder(pred_string_title_one_reshape)
+        user_present = self.userencoder(his_input_title_bert)
+        # news_present = layers.TimeDistributed(self.newsencoder)(reshaped_pred_input_string_title)
+        news_present = layers.TimeDistributed(self.newsencoder)(pred_input_title_bert)
+
+        # news_present_one = self.newsencoder(pred_string_title_one_reshape)
+        news_present_one = self.newsencoder(pred_title_bert_one_reshape)
 
         preds = layers.Dot(axes=-1)([news_present, user_present])
         preds = layers.Activation(activation="softmax")(preds)
@@ -531,8 +564,11 @@ class NRMSModel(BaseModel):
         pred_one = layers.Dot(axes=-1)([news_present_one, user_present])
         pred_one = layers.Activation(activation="sigmoid")(pred_one)
 
-        model = keras.Model([his_input_title, pred_input_title, his_input_string_title, pred_input_string_title], preds)
-        scorer = keras.Model([his_input_title, pred_input_title_one, his_input_string_title, pred_input_title_string_one], pred_one)
+        # model = keras.Model([his_input_title, pred_input_title, his_input_string_title, pred_input_string_title], preds)
+        # scorer = keras.Model([his_input_title, pred_input_title_one, his_input_string_title, pred_input_title_string_one], pred_one)
+
+        model = keras.Model([his_input_title, pred_input_title, his_input_title_bert, pred_input_title_bert], preds)
+        scorer = keras.Model([his_input_title, pred_input_title_one, his_input_title_bert, pred_input_title_bert_one], pred_one)
 
         model.summary()
         scorer.summary()

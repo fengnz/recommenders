@@ -178,3 +178,4 @@ reports/
 
 ### pip folders
 pip-wheel*
+aclImdb/
