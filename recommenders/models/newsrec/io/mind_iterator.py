@@ -470,9 +470,9 @@ class MINDIterator(BaseIterator):
         )
         click_title_index_batch = np.asarray(click_title_indexes, dtype=np.int64)
         candidate_title_bert_index_batch = np.asarray(
-            candidate_title_bert_indexes, dtype=np.int64
+            candidate_title_bert_indexes, dtype=np.float32
         )
-        click_title_bert_index_batch = np.asarray(click_title_bert_indexes, dtype=np.int64)
+        click_title_bert_index_batch = np.asarray(click_title_bert_indexes, dtype=np.float32)
         return {
             "impression_index_batch": imp_indexes,
             "user_index_batch": user_indexes,
@@ -565,7 +565,7 @@ class MINDIterator(BaseIterator):
         user_indexes = np.asarray(user_indexes, dtype=np.int32)
         impr_indexes = np.asarray(impr_indexes, dtype=np.int32)
         click_title_index_batch = np.asarray(click_title_indexes, dtype=np.int64)
-        click_title_bert_index_batch = np.asarray(click_title_bert_indexes, dtype=np.int64)
+        click_title_bert_index_batch = np.asarray(click_title_bert_indexes, dtype=np.float32)
 
         return {
             "user_index_batch": user_indexes,

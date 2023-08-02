@@ -336,6 +336,8 @@ class NRMSModel(BaseModel):
             # np.asarray(batch_data["clicked_title_string_batch"]),
             # np.asarray(batch_data["candidate_title_string_batch"]),
         ]
+
+        # print(batch_data["clicked_title_bert_batch"])
         input_label = batch_data["labels"]
         return input_feat, input_label
 
@@ -385,7 +387,7 @@ class NRMSModel(BaseModel):
         #)
 
         his_input_title_bert = keras.Input(
-           shape=(hparams.his_size, 512), dtype="int32"
+           shape=(hparams.his_size, 512), dtype="float32"
         )
 
         # his_input_string_title = keras.Input(
@@ -395,7 +397,7 @@ class NRMSModel(BaseModel):
         # reshaped_his_input_string_title = tf.expand_dims(his_input_string_title, axis=-1)
 
         click_title_presents = layers.TimeDistributed(titleencoder)(his_input_title_bert)
-        y = SelfAttention(16, 32, seed=self.seed)(
+        y = SelfAttention(hparams.head_num, hparams.head_dim, seed=self.seed)(
             [click_title_presents] * 3
         )
         user_present = AttLayer2(hparams.attention_hidden_dim, seed=self.seed)(y)
@@ -415,7 +417,12 @@ class NRMSModel(BaseModel):
             object: the news encoder of NRMS.
         """
         hparams = self.hparams
-        sequences_input_title = keras.Input(shape=(512,), dtype="int32", name="news_title_bert_input")
+        sequences_input_title = keras.Input(shape=(512,), dtype="float32", name="news_title_bert_input")
+
+        # try, take the first 30 only
+        def take_first_30(x):
+            return x[:, :30]
+
 
         use_bert = False
 
@@ -425,13 +432,19 @@ class NRMSModel(BaseModel):
             encoder_inputs = preprocessing_layer(sequences_input_string_title)
             encoder = hub.KerasLayer(tfhub_handle_encoder, trainable=True, name='BERT_encoder')
             outputs = encoder(encoder_inputs)
-            net = outputs['pooled_output']
-            net = tf.keras.layers.Dropout(0.1)(net)
+            y = outputs['pooled_output']
+            y = tf.keras.layers.Dropout(0.1)(y)
 
         else:
             # the title has been processed by bert, do nothing, just return
             # convert int 32 to float 32
-            net = tf.keras.layers.Lambda(lambda x: tf.cast(x, 'float32'))(sequences_input_title)
+            #y = tf.keras.layers.Lambda(lambda x: tf.cast(x, 'float32'))(y)
+            #y = tf.keras.layers.Lambda(take_first_30)(sequences_input_title)
+
+            y = tf.keras.layers.Dense(30)(sequences_input_title)
+            y = tf.expand_dims(y, axis=-1)
+            y = SelfAttention(hparams.head_num, hparams.head_dim, seed=self.seed)([y, y, y])
+            y = AttLayer2(hparams.attention_hidden_dim, seed=self.seed)(y)
 
         #sequences_input_title = net
 
@@ -473,7 +486,7 @@ class NRMSModel(BaseModel):
         #y = layers.Dropout(hparams.dropout)(y)
         #pred_title = AttLayer2(hparams.attention_hidden_dim, seed=self.seed)(y)
 
-        model = keras.Model(sequences_input_title, net, name="news_encoder")
+        model = keras.Model(sequences_input_title, y, name="news_encoder")
         print(model.summary())
         return model
 
@@ -495,10 +508,10 @@ class NRMSModel(BaseModel):
         )
 
         his_input_title_bert = keras.Input(
-            shape=(hparams.his_size, 512), dtype="int32"
+            shape=(hparams.his_size, 512), dtype="float32"
         )
         pred_input_title_bert = keras.Input(
-            shape=(hparams.npratio + 1, 512), dtype="int32"
+            shape=(hparams.npratio + 1, 512), dtype="float32"
         )
 
         # his_input_string_title= tf.keras.layers.Input(shape=(hparams.his_size,), dtype=tf.string, name='his_input_text')
@@ -517,7 +530,7 @@ class NRMSModel(BaseModel):
                 1,
                 512,
             ),
-            dtype="int32",
+            dtype="float32",
         )
 
         pred_input_title_string_one = keras.Input(
