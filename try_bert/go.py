@@ -4,7 +4,7 @@ import shutil
 import tensorflow as tf
 import tensorflow_hub as hub
 import tensorflow_text as text
-from official.nlp import optimization  # to create AdamW optimizer
+#from official.nlp import optimization  # to create AdamW optimizer
 
 import matplotlib.pyplot as plt
 
@@ -269,26 +269,26 @@ num_train_steps = steps_per_epoch * epochs
 num_warmup_steps = int(0.1*num_train_steps)
 
 init_lr = 3e-5
-optimizer = optimization.create_optimizer(init_lr=init_lr,
-                                          num_train_steps=num_train_steps,
-                                          num_warmup_steps=num_warmup_steps,
-                                          optimizer_type='adamw')
-# Define learning rate and other optimizer parameters
-learning_rate = 0.001
-beta_1 = 0.9
-beta_2 = 0.999
-epsilon = 1e-07
+# optimizer = optimization.create_optimizer(init_lr=init_lr,
+#                                           num_train_steps=num_train_steps,
+#                                           num_warmup_steps=num_warmup_steps,
+#                                           optimizer_type='adamw')
+# # Define learning rate and other optimizer parameters
+# learning_rate = 0.001
+# beta_1 = 0.9
+# beta_2 = 0.999
+# epsilon = 1e-07
+#
+# # Create Adam optimizer
+# adam_optimizer = tf.keras.optimizers.Adam(
+#     learning_rate=learning_rate,
+#     beta_1=beta_1,
+#     beta_2=beta_2,
+#     epsilon=epsilon
+# )
+#
 
-# Create Adam optimizer
-adam_optimizer = tf.keras.optimizers.Adam(
-    learning_rate=learning_rate,
-    beta_1=beta_1,
-    beta_2=beta_2,
-    epsilon=epsilon
-)
-
-
-classifier_model.compile(optimizer=optimizer,
+classifier_model.compile(optimizer='adam',
                          loss=loss,
                          metrics=metrics)
 

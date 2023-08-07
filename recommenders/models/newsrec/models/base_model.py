@@ -342,6 +342,8 @@ class BaseModel:
             _, group_labels, group_preds = self.run_slow_eval(
                 news_filename, behaviors_file
             )
+
+        print("cal_metric")
         res = cal_metric(group_labels, group_preds, self.hparams.metrics)
         return res
 
