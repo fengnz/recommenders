@@ -1,6 +1,7 @@
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License.
 
+import os
 import tensorflow as tf
 import numpy as np
 import pickle
@@ -107,10 +108,24 @@ class MINDIterator(BaseIterator):
         batch_count_for_bert = 0;
         title_batch_prepared_for_bert = [];
 
-        use_saved_bert = True
+        use_saved_bert = False
+
+        bert_model_names = {
+            "tf_hub_bert_1": "tf_hub_bert_1",
+            "deberta": "deberta"
+        }
+
+        selected_bert_model = "tf_hub_bert_1"
+
+        cached_bert_pooled_output_file_name = news_file + "_" + selected_bert_model + "_bert_index.npy"
+
+        if os.path.exists(cached_bert_pooled_output_file_name):
+            use_saved_bert = True
+        else:
+            print("File does not exist, will create new bert cache")
 
         if use_saved_bert:
-            self.news_title_bert_index = np.load(news_file + "_bert_index.npy")
+            self.news_title_bert_index = np.load(cached_bert_pooled_output_file_name)
 
         with tf.io.gfile.GFile(news_file, "r") as rd:
             for line in rd:
@@ -137,19 +152,20 @@ class MINDIterator(BaseIterator):
                     exit()
 
                 if not use_saved_bert and batch_count_for_bert == batch_size_for_bert:
-                    # text queue is full, start process
-                    text_preprocessed = bert_preprocess_model(title_batch_prepared_for_bert)
-                    bert_results = bert_model(text_preprocessed)
-                    bert_title = bert_results["pooled_output"]
-                    print(f'Pooled Outputs Shape:{bert_title.shape}')
-                    # clear the queue
-                    title_batch_prepared_for_bert = []
-                    batch_count_for_bert = 0
-                    print(f'type of self.bert_titles:{type(self.news_title_bert_index)}')
-                    print(f'type of bert title:{type(bert_title)}')
-                    self.news_title_bert_index = np.concatenate((self.news_title_bert_index, bert_title.numpy()),
-                                                                axis=0)
-                    print(f'self bert titles Shape:{self.news_title_bert_index.shape}')
+                    if selected_bert_model == "tf_hub_bert_1":
+                        # text queue is full, start process
+                        text_preprocessed = bert_preprocess_model(title_batch_prepared_for_bert)
+                        bert_results = bert_model(text_preprocessed)
+                        bert_title = bert_results["pooled_output"]
+                        print(f'Pooled Outputs Shape:{bert_title.shape}')
+                        # clear the queue
+                        title_batch_prepared_for_bert = []
+                        batch_count_for_bert = 0
+                        print(f'type of self.bert_titles:{type(self.news_title_bert_index)}')
+                        print(f'type of bert title:{type(bert_title)}')
+                        self.news_title_bert_index = np.concatenate((self.news_title_bert_index, bert_title.numpy()),
+                                                                    axis=0)
+                        print(f'self bert titles Shape:{self.news_title_bert_index.shape}')
 
                 # print(count)
                 title = word_tokenize(title)
@@ -164,18 +180,19 @@ class MINDIterator(BaseIterator):
             if len(title_batch_prepared_for_bert) != batch_count_for_bert:
                 print('fatal error: queue size does not match')
                 exit()
-            # text queue is full, start process
-            text_preprocessed = bert_preprocess_model(title_batch_prepared_for_bert)
-            bert_results = bert_model(text_preprocessed)
-            bert_title = bert_results["pooled_output"]
-            print(f'Pooled Outputs Shape:{bert_title.shape}')
-            # clear the queue
-            title_batch_prepared_for_bert = []
-            batch_count_for_bert = 0
-            print(f'type of self.bert_titles:{type(self.news_title_bert_index)}')
-            print(f'type of bert title:{type(bert_title)}')
-            self.news_title_bert_index = np.concatenate((self.news_title_bert_index, bert_title.numpy()), axis=0)
-            print(f'self bert titles Shape:{self.news_title_bert_index.shape}')
+            if selected_bert_model == "tf_hub_bert_1":
+                # text queue is full, start process
+                text_preprocessed = bert_preprocess_model(title_batch_prepared_for_bert)
+                bert_results = bert_model(text_preprocessed)
+                bert_title = bert_results["pooled_output"]
+                print(f'Pooled Outputs Shape:{bert_title.shape}')
+                # clear the queue
+                title_batch_prepared_for_bert = []
+                batch_count_for_bert = 0
+                print(f'type of self.bert_titles:{type(self.news_title_bert_index)}')
+                print(f'type of bert title:{type(bert_title)}')
+                self.news_title_bert_index = np.concatenate((self.news_title_bert_index, bert_title.numpy()), axis=0)
+                print(f'self bert titles Shape:{self.news_title_bert_index.shape}')
 
         # convert news_title list to ndarray
         self.news_title = np.asarray(self.news_title)
@@ -193,7 +210,7 @@ class MINDIterator(BaseIterator):
         print(self.news_title_bert_index.shape)
 
         if not use_saved_bert:
-            np.save(news_file + "_bert_index", self.news_title_bert_index)
+            np.save(cached_bert_pooled_output_file_name, self.news_title_bert_index)
 
         self.news_title_index = np.zeros(
             (len(news_title), self.title_size), dtype="int32"
