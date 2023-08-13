@@ -424,9 +424,9 @@ class NRMSModel(BaseModel):
             return x[:, :30]
 
 
-        use_bert = False
+        chain_bert = False
 
-        if use_bert:
+        if chain_bert:
             sequences_input_string_title = keras.Input(shape=(), dtype=tf.string, name="news_title_input")
             preprocessing_layer = hub.KerasLayer(tfhub_handle_preprocess, name='preprocessing')
             encoder_inputs = preprocessing_layer(sequences_input_string_title)
@@ -441,10 +441,20 @@ class NRMSModel(BaseModel):
             #y = tf.keras.layers.Lambda(lambda x: tf.cast(x, 'float32'))(y)
             #y = tf.keras.layers.Lambda(take_first_30)(sequences_input_title)
 
-            y = tf.keras.layers.Dense(30)(sequences_input_title)
-            y = tf.expand_dims(y, axis=-1)
-            y = SelfAttention(hparams.head_num, hparams.head_dim, seed=self.seed)([y, y, y])
-            y = AttLayer2(hparams.attention_hidden_dim, seed=self.seed)(y)
+            reduced_sequences_input_title = tf.keras.layers.Dense(30)(sequences_input_title)
+            y = tf.expand_dims(reduced_sequences_input_title, axis=-1)
+
+            use_fast_former = True
+            if use_fast_former:
+                qmask=Lambda(lambda x:  K.cast(K.cast(x,'bool'),'float32'))(reduced_sequences_input_title)
+                y = Fastformer(hparams.head_num,hparams.head_dim)([y,y,qmask,qmask])
+            else:
+                y = SelfAttention(hparams.head_num, hparams.head_dim, seed=self.seed)([y, y, y])
+                y = AttLayer2(hparams.attention_hidden_dim, seed=self.seed)(y)
+
+
+        y = layers.Dropout(hparams.dropout)(y)
+        y = AttLayer2(hparams.attention_hidden_dim, seed=self.seed)(y)
 
         #sequences_input_title = net
 
