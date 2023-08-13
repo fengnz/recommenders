@@ -12,6 +12,9 @@ import tensorflow_hub as hub
 
 from recommenders.models.newsrec.io.bert_model import bert_preprocess_model, bert_model
 
+from transformers import TFAutoModel, AutoTokenizer
+
+
 __all__ = ["MINDIterator"]
 
 
@@ -97,11 +100,7 @@ class MINDIterator(BaseIterator):
         print(f'Sequence Outputs Shape:{bert_results["sequence_output"].shape}')
         print(f'Sequence Outputs Values:{bert_results["sequence_output"][0, :12]}')
 
-        self.news_title_bert_index = bert_results["pooled_output"]
 
-        self.news_title_bert_index = np.asarray(self.news_title_bert_index)
-
-        np.save('data.npy', self.news_title_bert_index)
         count = 0
 
         batch_size_for_bert = 128
@@ -115,7 +114,26 @@ class MINDIterator(BaseIterator):
             "deberta": "deberta"
         }
 
-        selected_bert_model = "tf_hub_bert_1"
+        deberta_tokenizer = AutoTokenizer.from_pretrained("microsoft/deberta-v2-xlarge")
+        deberta_model = TFAutoModel.from_pretrained("microsoft/deberta-v2-xlarge")
+
+        selected_bert_model = "deberta"
+
+        if selected_bert_model == "tf_hub_bert_1":
+            self.news_title_bert_index = bert_results["pooled_output"]
+            self.news_title_bert_index = np.asarray(self.news_title_bert_index)
+        if selected_bert_model == "deberta":
+            inputs = deberta_tokenizer(
+                text_test,
+                padding=True,
+                truncation=True,
+                max_length=30,
+                return_tensors="tf")
+            outputs = deberta_model(**inputs)
+            bert_title = outputs.last_hidden_state[:, 0:1, :]
+            bert_title = tf.reshape(bert_title, (-1, 1536))
+            self.news_title_bert_index = bert_title
+            self.news_title_bert_index = np.asarray(self.news_title_bert_index)
 
         cached_bert_pooled_output_file_name = news_file + "_" + selected_bert_model + "_bert_index.npy"
 
@@ -152,6 +170,25 @@ class MINDIterator(BaseIterator):
                     exit()
 
                 if not use_saved_bert and batch_count_for_bert == batch_size_for_bert:
+                    if selected_bert_model == "deberta":
+                        inputs = deberta_tokenizer(
+                            title_batch_prepared_for_bert,
+                            padding=True,
+                            truncation=True,
+                            max_length=30,
+                            return_tensors="tf")
+                        outputs = deberta_model(**inputs)
+                        # clear the queue
+                        title_batch_prepared_for_bert = []
+                        batch_count_for_bert = 0
+                        bert_title = outputs.last_hidden_state[:, 0:1, :]
+                        bert_title = tf.reshape(bert_title, (-1, 1536))
+                        print(f'type of bert title:{type(bert_title)}')
+                        print(f'Pooled Outputs Shape:{bert_title.shape}')
+
+                        self.news_title_bert_index = np.concatenate((self.news_title_bert_index, bert_title.numpy()),
+                                                                    axis=0)
+                        print(f'self bert titles Shape:{self.news_title_bert_index.shape}')
                     if selected_bert_model == "tf_hub_bert_1":
                         # text queue is full, start process
                         text_preprocessed = bert_preprocess_model(title_batch_prepared_for_bert)
@@ -192,6 +229,22 @@ class MINDIterator(BaseIterator):
                 print(f'type of self.bert_titles:{type(self.news_title_bert_index)}')
                 print(f'type of bert title:{type(bert_title)}')
                 self.news_title_bert_index = np.concatenate((self.news_title_bert_index, bert_title.numpy()), axis=0)
+                print(f'self bert titles Shape:{self.news_title_bert_index.shape}')
+            if selected_bert_model == "deberta":
+                inputs = deberta_tokenizer(
+                    title_batch_prepared_for_bert,
+                    padding=True,
+                    truncation=True,
+                    max_length=30,
+                    return_tensors="tf")
+                outputs = deberta_model(**inputs)
+                # clear the queue
+                bert_title = outputs.last_hidden_state[:, 0:1, :]
+                bert_title = tf.reshape(bert_title, (-1, 1536))
+                self.news_title_bert_index = np.concatenate((self.news_title_bert_index, bert_title.numpy()),
+                                                            axis=0)
+                title_batch_prepared_for_bert = []
+                batch_count_for_bert = 0
                 print(f'self bert titles Shape:{self.news_title_bert_index.shape}')
 
         # convert news_title list to ndarray

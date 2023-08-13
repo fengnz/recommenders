@@ -27,11 +27,11 @@ seed = 42
 batch_size = 32
 
 # Options: demo, small, large
-MIND_type = 'large'
+MIND_type = 'demo'
 
 tmpdir = TemporaryDirectory()
 data_path = '/Users/fennng/Documents/phd/jupyter/nrms/' + MIND_type
-data_path = '/home/yden034/nrms2/' + MIND_type
+#data_path = '/home/yden034/nrms2/' + MIND_type
 
 train_news_file = os.path.join(data_path, 'train', r'news.tsv')
 train_behaviors_file = os.path.join(data_path, 'train', r'behaviors.tsv')
@@ -66,8 +66,8 @@ print(hparams)
 iterator = MINDIterator
 model = NRMSModel(hparams, iterator, seed=seed)
 #%%
-print('hi')
-#print(model.run_eval(valid_news_file, valid_behaviors_file))
+print('do a quick eval before fit')
+print(model.run_eval(valid_news_file, valid_behaviors_file))
 #%%
 
 #%%

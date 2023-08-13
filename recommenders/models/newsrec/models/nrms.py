@@ -387,7 +387,7 @@ class NRMSModel(BaseModel):
         #)
 
         his_input_title_bert = keras.Input(
-           shape=(hparams.his_size, 512), dtype="float32"
+           shape=(hparams.his_size, 1536), dtype="float32"
         )
 
         # his_input_string_title = keras.Input(
@@ -417,7 +417,7 @@ class NRMSModel(BaseModel):
             object: the news encoder of NRMS.
         """
         hparams = self.hparams
-        sequences_input_title = keras.Input(shape=(512,), dtype="float32", name="news_title_bert_input")
+        sequences_input_title = keras.Input(shape=(1536,), dtype="float32", name="news_title_bert_input")
 
         # try, take the first 30 only
         def take_first_30(x):
@@ -508,10 +508,10 @@ class NRMSModel(BaseModel):
         )
 
         his_input_title_bert = keras.Input(
-            shape=(hparams.his_size, 512), dtype="float32"
+            shape=(hparams.his_size, 1536), dtype="float32"
         )
         pred_input_title_bert = keras.Input(
-            shape=(hparams.npratio + 1, 512), dtype="float32"
+            shape=(hparams.npratio + 1, 1536), dtype="float32"
         )
 
         # his_input_string_title= tf.keras.layers.Input(shape=(hparams.his_size,), dtype=tf.string, name='his_input_text')
@@ -528,7 +528,7 @@ class NRMSModel(BaseModel):
         pred_input_title_bert_one = keras.Input(
             shape=(
                 1,
-                512,
+                1536,
             ),
             dtype="float32",
         )
@@ -543,7 +543,7 @@ class NRMSModel(BaseModel):
             pred_input_title_one
         )
 
-        pred_title_bert_one_reshape = layers.Reshape((512,))(
+        pred_title_bert_one_reshape = layers.Reshape((1536,))(
             pred_input_title_bert_one
         )
 
