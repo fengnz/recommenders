@@ -118,6 +118,8 @@ class MINDIterator(BaseIterator):
         deberta_model = TFAutoModel.from_pretrained("microsoft/deberta-v2-xlarge")
 
         selected_bert_model = "deberta"
+        use_CLS_token_only = False
+
 
         if selected_bert_model == "tf_hub_bert_1":
             self.news_title_bert_index = bert_results["pooled_output"]
@@ -125,17 +127,27 @@ class MINDIterator(BaseIterator):
         if selected_bert_model == "deberta":
             inputs = deberta_tokenizer(
                 text_test,
-                padding=True,
+                padding='max_length',
                 truncation=True,
                 max_length=30,
                 return_tensors="tf")
             outputs = deberta_model(**inputs)
-            bert_title = outputs.last_hidden_state[:, 0:1, :]
-            bert_title = tf.reshape(bert_title, (-1, 1536))
+            if use_CLS_token_only:
+                bert_title = outputs.last_hidden_state[:, 0:1, :]
+                bert_title = tf.reshape(bert_title, (-1, 1536))
+            else:
+                bert_title = outputs.last_hidden_state[:, :, :]
+                input_masks = inputs.data["attention_mask"]
+                input_masks = tf.reshape(input_masks, (-1, 30, 1))
+                input_masks = tf.cast(input_masks, tf.float32)
+                # concat the bert_title and masks together
+                # will split them back to original in the news encoder
+                bert_title = tf.concat([bert_title, input_masks], axis=2)
+
             self.news_title_bert_index = bert_title
             self.news_title_bert_index = np.asarray(self.news_title_bert_index)
 
-        cached_bert_pooled_output_file_name = news_file + "_" + selected_bert_model + "_bert_index.npy"
+        cached_bert_pooled_output_file_name = news_file + "_" + selected_bert_model + "_" + str(use_CLS_token_only) + "_bert_index.npy"
 
         if os.path.exists(cached_bert_pooled_output_file_name):
             use_saved_bert = True
@@ -173,7 +185,7 @@ class MINDIterator(BaseIterator):
                     if selected_bert_model == "deberta":
                         inputs = deberta_tokenizer(
                             title_batch_prepared_for_bert,
-                            padding=True,
+                            padding='max_length',
                             truncation=True,
                             max_length=30,
                             return_tensors="tf")
@@ -181,8 +193,18 @@ class MINDIterator(BaseIterator):
                         # clear the queue
                         title_batch_prepared_for_bert = []
                         batch_count_for_bert = 0
-                        bert_title = outputs.last_hidden_state[:, 0:1, :]
-                        bert_title = tf.reshape(bert_title, (-1, 1536))
+                        if use_CLS_token_only:
+                            bert_title = outputs.last_hidden_state[:, 0:1, :]
+                            bert_title = tf.reshape(bert_title, (-1, 1536))
+                        else:
+                            bert_title = outputs.last_hidden_state[:, :, :]
+                            input_masks = inputs.data["attention_mask"]
+                            input_masks = tf.reshape(input_masks, (-1, 30, 1))
+                            input_masks = tf.cast(input_masks, tf.float32)
+                            # concat the bert_title and masks together
+                            # will split them back to original in the news encoder
+                            bert_title = tf.concat([bert_title, input_masks], axis=2)
+
                         print(f'type of bert title:{type(bert_title)}')
                         print(f'Pooled Outputs Shape:{bert_title.shape}')
 
@@ -233,14 +255,24 @@ class MINDIterator(BaseIterator):
             if selected_bert_model == "deberta":
                 inputs = deberta_tokenizer(
                     title_batch_prepared_for_bert,
-                    padding=True,
+                    padding='max_length',
                     truncation=True,
                     max_length=30,
                     return_tensors="tf")
                 outputs = deberta_model(**inputs)
                 # clear the queue
-                bert_title = outputs.last_hidden_state[:, 0:1, :]
-                bert_title = tf.reshape(bert_title, (-1, 1536))
+                if use_CLS_token_only:
+                    bert_title = outputs.last_hidden_state[:, 0:1, :]
+                    bert_title = tf.reshape(bert_title, (-1, 1536))
+                else:
+                    bert_title = outputs.last_hidden_state[:, :, :]
+                    input_masks = inputs.data["attention_mask"]
+                    input_masks = tf.reshape(input_masks, (-1, 30, 1))
+                    input_masks = tf.cast(input_masks, tf.float32)
+                    # concat the bert_title and masks together
+                    # will split them back to original in the news encoder
+                    bert_title = tf.concat([bert_title, input_masks], axis=2)
+
                 self.news_title_bert_index = np.concatenate((self.news_title_bert_index, bert_title.numpy()),
                                                             axis=0)
                 title_batch_prepared_for_bert = []

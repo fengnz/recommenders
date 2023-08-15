@@ -387,7 +387,7 @@ class NRMSModel(BaseModel):
         #)
 
         his_input_title_bert = keras.Input(
-           shape=(hparams.his_size, 1536), dtype="float32"
+           shape=(hparams.his_size, hparams.title_size, 1537), dtype="float32"
         )
 
         # his_input_string_title = keras.Input(
@@ -417,7 +417,14 @@ class NRMSModel(BaseModel):
             object: the news encoder of NRMS.
         """
         hparams = self.hparams
-        sequences_input_title = keras.Input(shape=(1536,), dtype="float32", name="news_title_bert_input")
+        #sequences_input_title = keras.Input(shape=(1536,), dtype="float32", name="news_title_bert_input")
+        concated_sequences_input_title = keras.Input(shape=(30, 1537,), dtype="float32", name="news_title_bert_input")
+
+        # split the input masks back
+
+        input_mask = concated_sequences_input_title[:, :, 1536:]
+        input_mask = tf.squeeze(input_mask, axis=-1)
+        sequences_input_title = concated_sequences_input_title[:, :, :1536]
 
         # try, take the first 30 only
         def take_first_30(x):
@@ -441,16 +448,19 @@ class NRMSModel(BaseModel):
             #y = tf.keras.layers.Lambda(lambda x: tf.cast(x, 'float32'))(y)
             #y = tf.keras.layers.Lambda(take_first_30)(sequences_input_title)
 
-            reduced_sequences_input_title = tf.keras.layers.Dense(30)(sequences_input_title)
-            y = tf.expand_dims(reduced_sequences_input_title, axis=-1)
+            # reduced_sequences_input_title = tf.keras.layers.Dense(30)(sequences_input_title)
+            # y = tf.expand_dims(reduced_sequences_input_title, axis=-1)
+            reduced_sequences_input_title = sequences_input_title
 
             use_fast_former = True
             if use_fast_former:
-                qmask=Lambda(lambda x:  K.cast(K.cast(x,'bool'),'float32'))(reduced_sequences_input_title)
-                y = Fastformer(hparams.head_num,hparams.head_dim)([y,y,qmask,qmask])
+                # qmask=Lambda(lambda x:  K.cast(K.cast(x,'bool'),'float32'))(reduced_sequences_input_title)
+                qmask = input_mask
+                y = sequences_input_title
+                y = Fastformer(hparams.head_num,hparams.head_dim)([y, y, qmask, qmask])
             else:
+                y = sequences_input_title
                 y = SelfAttention(hparams.head_num, hparams.head_dim, seed=self.seed)([y, y, y])
-                y = AttLayer2(hparams.attention_hidden_dim, seed=self.seed)(y)
 
 
         y = layers.Dropout(hparams.dropout)(y)
@@ -496,7 +506,7 @@ class NRMSModel(BaseModel):
         #y = layers.Dropout(hparams.dropout)(y)
         #pred_title = AttLayer2(hparams.attention_hidden_dim, seed=self.seed)(y)
 
-        model = keras.Model(sequences_input_title, y, name="news_encoder")
+        model = keras.Model(concated_sequences_input_title, y, name="news_encoder")
         print(model.summary())
         return model
 
@@ -517,11 +527,14 @@ class NRMSModel(BaseModel):
             shape=(hparams.npratio + 1, hparams.title_size), dtype="int32"
         )
 
+        # his_input_title_bert = keras.Input(
+        #     shape=(hparams.his_size, 1536), dtype="float32"
+        # )
         his_input_title_bert = keras.Input(
-            shape=(hparams.his_size, 1536), dtype="float32"
+            shape=(hparams.his_size, hparams.title_size, 1537), dtype="float32"
         )
         pred_input_title_bert = keras.Input(
-            shape=(hparams.npratio + 1, 1536), dtype="float32"
+            shape=(hparams.npratio + 1, hparams.title_size, 1537), dtype="float32"
         )
 
         # his_input_string_title= tf.keras.layers.Input(shape=(hparams.his_size,), dtype=tf.string, name='his_input_text')
@@ -535,10 +548,19 @@ class NRMSModel(BaseModel):
             dtype="int32",
         )
 
+        # pred_input_title_bert_one = keras.Input(
+        #     shape=(
+        #         1,
+        #         1536,
+        #     ),
+        #     dtype="float32",
+        # )
+
         pred_input_title_bert_one = keras.Input(
             shape=(
                 1,
-                1536,
+                hparams.title_size,
+                1537,
             ),
             dtype="float32",
         )
@@ -553,7 +575,7 @@ class NRMSModel(BaseModel):
             pred_input_title_one
         )
 
-        pred_title_bert_one_reshape = layers.Reshape((1536,))(
+        pred_title_bert_one_reshape = layers.Reshape((hparams.title_size, 1537,))(
             pred_input_title_bert_one
         )
 
