@@ -387,7 +387,7 @@ class NRMSModel(BaseModel):
         #)
 
         his_input_title_bert = keras.Input(
-           shape=(hparams.his_size, hparams.title_size, 1537), dtype="float32"
+           shape=(hparams.his_size, hparams.title_size + hparams.deberta_states_num - 1, 1537), dtype="float32"
         )
 
         # his_input_string_title = keras.Input(
@@ -418,7 +418,7 @@ class NRMSModel(BaseModel):
         """
         hparams = self.hparams
         #sequences_input_title = keras.Input(shape=(1536,), dtype="float32", name="news_title_bert_input")
-        concated_sequences_input_title = keras.Input(shape=(30, 1537,), dtype="float32", name="news_title_bert_input")
+        concated_sequences_input_title = keras.Input(shape=(hparams.title_size + hparams.deberta_states_num - 1, 1537,), dtype="float32", name="news_title_bert_input")
 
         # split the input masks back
 
@@ -531,10 +531,11 @@ class NRMSModel(BaseModel):
         #     shape=(hparams.his_size, 1536), dtype="float32"
         # )
         his_input_title_bert = keras.Input(
-            shape=(hparams.his_size, hparams.title_size, 1537), dtype="float32"
+            shape=(hparams.his_size, hparams.title_size + hparams.deberta_states_num - 1, 1537), dtype="float32"
+
         )
         pred_input_title_bert = keras.Input(
-            shape=(hparams.npratio + 1, hparams.title_size, 1537), dtype="float32"
+            shape=(hparams.npratio + 1, hparams.title_size + hparams.deberta_states_num - 1, 1537), dtype="float32"
         )
 
         # his_input_string_title= tf.keras.layers.Input(shape=(hparams.his_size,), dtype=tf.string, name='his_input_text')
@@ -559,7 +560,7 @@ class NRMSModel(BaseModel):
         pred_input_title_bert_one = keras.Input(
             shape=(
                 1,
-                hparams.title_size,
+                hparams.title_size + hparams.deberta_states_num - 1,
                 1537,
             ),
             dtype="float32",
@@ -575,7 +576,7 @@ class NRMSModel(BaseModel):
             pred_input_title_one
         )
 
-        pred_title_bert_one_reshape = layers.Reshape((hparams.title_size, 1537,))(
+        pred_title_bert_one_reshape = layers.Reshape((hparams.title_size + hparams.deberta_states_num - 1, 1537,))(
             pred_input_title_bert_one
         )
 

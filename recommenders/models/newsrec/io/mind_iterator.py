@@ -10,7 +10,7 @@ from recommenders.models.deeprec.io.iterator import BaseIterator
 from recommenders.models.newsrec.newsrec_utils import word_tokenize, newsample
 import tensorflow_hub as hub
 
-from recommenders.models.newsrec.io.bert_model import bert_preprocess_model, bert_model
+#from recommenders.models.newsrec.io.bert_model import bert_preprocess_model, bert_model
 
 from transformers import TFAutoModel, AutoTokenizer
 
@@ -73,11 +73,48 @@ class MINDIterator(BaseIterator):
         with open(file_path, "rb") as f:
             return pickle.load(f)
 
+    import tensorflow as tf
+
+
     def init_news(self, news_file):
         """init news information given news file, such as news_title_index and nid2index.
         Args:
             news_file: path of news file
         """
+
+        def combine_hidden_states(a_inputs, b_outputs):
+            hidden_states = b_outputs.hidden_states  # List of hidden states (including embeddings)
+
+            # Extract CLS token from all layers except the last one
+            cls_tokens = [layer[:, 0, :] for layer in hidden_states[:-1]]
+
+            # the cls_tokens has a shape of (batch_size, attention_size) with length of 24 (layer number -1).
+            # reshape it to (batch_size, length -1, attention_size)
+            cls_tokens_concatenated = tf.stack(cls_tokens, axis=1)
+
+            # Concatenate the extracted CLS tokens to the last hidden state
+            #cls_tokens_concatenated = cls_tokens
+            last_hidden_state = hidden_states[-1]
+
+            # Prepend the concatenated CLS tokens to the last hidden state
+            combined_hidden_state = tf.concat([cls_tokens_concatenated, last_hidden_state], axis=1)
+
+            c_input_masks = a_inputs.data["attention_mask"]
+            # Create a tensor of ones with the shape of (batch_size, num_cls_tokens, 1)
+            ones_mask = tf.ones((tf.shape(c_input_masks)[0], cls_tokens_concatenated.shape[1], 1), dtype=tf.float32)
+            c_input_masks_reshapped = tf.reshape(c_input_masks, (-1, 30, 1))
+            c_input_masks_reshapped = tf.cast(c_input_masks_reshapped, tf.float32)
+
+        # Concatenate the ones_mask with the input_masks
+            input_masks_extended = tf.concat([ones_mask, c_input_masks_reshapped], axis=1)
+
+            # Concatenate the combined_hidden_state and input_masks_extended
+            combined_tensor = tf.concat([combined_hidden_state, input_masks_extended], axis=2)
+
+            return combined_tensor
+
+
+
 
         self.nid2index = {}
         self.news_title = [""]
@@ -85,20 +122,20 @@ class MINDIterator(BaseIterator):
 
         text_test = ['this is such an amazing movie!']
         text_test = text_test
-        text_preprocessed = bert_preprocess_model(text_test)
-
-        print(f'Keys       : {list(text_preprocessed.keys())}')
-        print(f'Shape      : {text_preprocessed["input_word_ids"].shape}')
-        print(f'Word Ids   : {text_preprocessed["input_word_ids"][0, :12]}')
-        print(f'Input Mask : {text_preprocessed["input_mask"][0, :12]}')
-        print(f'Type Ids   : {text_preprocessed["input_type_ids"][0, :12]}')
-
-        bert_results = bert_model(text_preprocessed)
-
-        print(f'Pooled Outputs Shape:{bert_results["pooled_output"].shape}')
-        print(f'Pooled Outputs Values:{bert_results["pooled_output"][0, :12]}')
-        print(f'Sequence Outputs Shape:{bert_results["sequence_output"].shape}')
-        print(f'Sequence Outputs Values:{bert_results["sequence_output"][0, :12]}')
+        # text_preprocessed = bert_preprocess_model(text_test)
+        #
+        # print(f'Keys       : {list(text_preprocessed.keys())}')
+        # print(f'Shape      : {text_preprocessed["input_word_ids"].shape}')
+        # print(f'Word Ids   : {text_preprocessed["input_word_ids"][0, :12]}')
+        # print(f'Input Mask : {text_preprocessed["input_mask"][0, :12]}')
+        # print(f'Type Ids   : {text_preprocessed["input_type_ids"][0, :12]}')
+        #
+        # bert_results = bert_model(text_preprocessed)
+        #
+        # print(f'Pooled Outputs Shape:{bert_results["pooled_output"].shape}')
+        # print(f'Pooled Outputs Values:{bert_results["pooled_output"][0, :12]}')
+        # print(f'Sequence Outputs Shape:{bert_results["sequence_output"].shape}')
+        # print(f'Sequence Outputs Values:{bert_results["sequence_output"][0, :12]}')
 
 
         count = 0
@@ -119,11 +156,13 @@ class MINDIterator(BaseIterator):
 
         selected_bert_model = "deberta"
         use_CLS_token_only = False
+        add_CLS_of_each_layer = True
 
 
         if selected_bert_model == "tf_hub_bert_1":
-            self.news_title_bert_index = bert_results["pooled_output"]
-            self.news_title_bert_index = np.asarray(self.news_title_bert_index)
+            pass
+            # self.news_title_bert_index = bert_results["pooled_output"]
+            # self.news_title_bert_index = np.asarray(self.news_title_bert_index)
         if selected_bert_model == "deberta":
             inputs = deberta_tokenizer(
                 text_test,
@@ -131,23 +170,26 @@ class MINDIterator(BaseIterator):
                 truncation=True,
                 max_length=30,
                 return_tensors="tf")
-            outputs = deberta_model(**inputs)
+            outputs = deberta_model(**inputs, output_hidden_states=True)
             if use_CLS_token_only:
                 bert_title = outputs.last_hidden_state[:, 0:1, :]
                 bert_title = tf.reshape(bert_title, (-1, 1536))
             else:
-                bert_title = outputs.last_hidden_state[:, :, :]
-                input_masks = inputs.data["attention_mask"]
-                input_masks = tf.reshape(input_masks, (-1, 30, 1))
-                input_masks = tf.cast(input_masks, tf.float32)
-                # concat the bert_title and masks together
-                # will split them back to original in the news encoder
-                bert_title = tf.concat([bert_title, input_masks], axis=2)
+                # bert_title = outputs.last_hidden_state[:, :, :]
+                # input_masks = inputs.data["attention_mask"]
+                # input_masks = tf.reshape(input_masks, (-1, 30, 1))
+                # input_masks = tf.cast(input_masks, tf.float32)
+                # # concat the bert_title and masks together
+                # # will split them back to original in the news encoder
+                # bert_title = tf.concat([bert_title, input_masks], axis=2)
 
+                bert_title = combine_hidden_states(inputs, outputs)
+
+            # comment these two lines out when using saved bert
             self.news_title_bert_index = bert_title
             self.news_title_bert_index = np.asarray(self.news_title_bert_index)
 
-        cached_bert_pooled_output_file_name = news_file + "_" + selected_bert_model + "_" + str(use_CLS_token_only) + "_bert_index.npy"
+        cached_bert_pooled_output_file_name = news_file + "_" + selected_bert_model + "_" + str(use_CLS_token_only) + str(add_CLS_of_each_layer) + "_bert_index.npy"
 
         if os.path.exists(cached_bert_pooled_output_file_name):
             use_saved_bert = True
@@ -189,7 +231,7 @@ class MINDIterator(BaseIterator):
                             truncation=True,
                             max_length=30,
                             return_tensors="tf")
-                        outputs = deberta_model(**inputs)
+                        outputs = deberta_model(**inputs, output_hidden_states=True)
                         # clear the queue
                         title_batch_prepared_for_bert = []
                         batch_count_for_bert = 0
@@ -197,13 +239,14 @@ class MINDIterator(BaseIterator):
                             bert_title = outputs.last_hidden_state[:, 0:1, :]
                             bert_title = tf.reshape(bert_title, (-1, 1536))
                         else:
-                            bert_title = outputs.last_hidden_state[:, :, :]
-                            input_masks = inputs.data["attention_mask"]
-                            input_masks = tf.reshape(input_masks, (-1, 30, 1))
-                            input_masks = tf.cast(input_masks, tf.float32)
-                            # concat the bert_title and masks together
-                            # will split them back to original in the news encoder
-                            bert_title = tf.concat([bert_title, input_masks], axis=2)
+                            # bert_title = outputs.last_hidden_state[:, :, :]
+                            # input_masks = inputs.data["attention_mask"]
+                            # input_masks = tf.reshape(input_masks, (-1, 30, 1))
+                            # input_masks = tf.cast(input_masks, tf.float32)
+                            # # concat the bert_title and masks together
+                            # # will split them back to original in the news encoder
+                            # bert_title = tf.concat([bert_title, input_masks], axis=2)
+                            bert_title = combine_hidden_states(inputs, outputs)
 
                         print(f'type of bert title:{type(bert_title)}')
                         print(f'Pooled Outputs Shape:{bert_title.shape}')
@@ -212,19 +255,20 @@ class MINDIterator(BaseIterator):
                                                                     axis=0)
                         print(f'self bert titles Shape:{self.news_title_bert_index.shape}')
                     if selected_bert_model == "tf_hub_bert_1":
+                        pass
                         # text queue is full, start process
-                        text_preprocessed = bert_preprocess_model(title_batch_prepared_for_bert)
-                        bert_results = bert_model(text_preprocessed)
-                        bert_title = bert_results["pooled_output"]
-                        print(f'Pooled Outputs Shape:{bert_title.shape}')
-                        # clear the queue
-                        title_batch_prepared_for_bert = []
-                        batch_count_for_bert = 0
-                        print(f'type of self.bert_titles:{type(self.news_title_bert_index)}')
-                        print(f'type of bert title:{type(bert_title)}')
-                        self.news_title_bert_index = np.concatenate((self.news_title_bert_index, bert_title.numpy()),
-                                                                    axis=0)
-                        print(f'self bert titles Shape:{self.news_title_bert_index.shape}')
+                        # text_preprocessed = bert_preprocess_model(title_batch_prepared_for_bert)
+                        # bert_results = bert_model(text_preprocessed)
+                        # bert_title = bert_results["pooled_output"]
+                        # print(f'Pooled Outputs Shape:{bert_title.shape}')
+                        # # clear the queue
+                        # title_batch_prepared_for_bert = []
+                        # batch_count_for_bert = 0
+                        # print(f'type of self.bert_titles:{type(self.news_title_bert_index)}')
+                        # print(f'type of bert title:{type(bert_title)}')
+                        # self.news_title_bert_index = np.concatenate((self.news_title_bert_index, bert_title.numpy()),
+                        #                                             axis=0)
+                        # print(f'self bert titles Shape:{self.news_title_bert_index.shape}')
 
                 # print(count)
                 title = word_tokenize(title)
@@ -240,18 +284,19 @@ class MINDIterator(BaseIterator):
                 print('fatal error: queue size does not match')
                 exit()
             if selected_bert_model == "tf_hub_bert_1":
+                pass
                 # text queue is full, start process
-                text_preprocessed = bert_preprocess_model(title_batch_prepared_for_bert)
-                bert_results = bert_model(text_preprocessed)
-                bert_title = bert_results["pooled_output"]
-                print(f'Pooled Outputs Shape:{bert_title.shape}')
-                # clear the queue
-                title_batch_prepared_for_bert = []
-                batch_count_for_bert = 0
-                print(f'type of self.bert_titles:{type(self.news_title_bert_index)}')
-                print(f'type of bert title:{type(bert_title)}')
-                self.news_title_bert_index = np.concatenate((self.news_title_bert_index, bert_title.numpy()), axis=0)
-                print(f'self bert titles Shape:{self.news_title_bert_index.shape}')
+                # text_preprocessed = bert_preprocess_model(title_batch_prepared_for_bert)
+                # bert_results = bert_model(text_preprocessed)
+                # bert_title = bert_results["pooled_output"]
+                # print(f'Pooled Outputs Shape:{bert_title.shape}')
+                # # clear the queue
+                # title_batch_prepared_for_bert = []
+                # batch_count_for_bert = 0
+                # print(f'type of self.bert_titles:{type(self.news_title_bert_index)}')
+                # print(f'type of bert title:{type(bert_title)}')
+                # self.news_title_bert_index = np.concatenate((self.news_title_bert_index, bert_title.numpy()), axis=0)
+                # print(f'self bert titles Shape:{self.news_title_bert_index.shape}')
             if selected_bert_model == "deberta":
                 inputs = deberta_tokenizer(
                     title_batch_prepared_for_bert,
@@ -259,19 +304,20 @@ class MINDIterator(BaseIterator):
                     truncation=True,
                     max_length=30,
                     return_tensors="tf")
-                outputs = deberta_model(**inputs)
+                outputs = deberta_model(**inputs, output_hidden_states=True)
                 # clear the queue
                 if use_CLS_token_only:
                     bert_title = outputs.last_hidden_state[:, 0:1, :]
                     bert_title = tf.reshape(bert_title, (-1, 1536))
                 else:
-                    bert_title = outputs.last_hidden_state[:, :, :]
-                    input_masks = inputs.data["attention_mask"]
-                    input_masks = tf.reshape(input_masks, (-1, 30, 1))
-                    input_masks = tf.cast(input_masks, tf.float32)
-                    # concat the bert_title and masks together
-                    # will split them back to original in the news encoder
-                    bert_title = tf.concat([bert_title, input_masks], axis=2)
+                    # bert_title = outputs.last_hidden_state[:, :, :]
+                    # input_masks = inputs.data["attention_mask"]
+                    # input_masks = tf.reshape(input_masks, (-1, 30, 1))
+                    # input_masks = tf.cast(input_masks, tf.float32)
+                    # # concat the bert_title and masks together
+                    # # will split them back to original in the news encoder
+                    # bert_title = tf.concat([bert_title, input_masks], axis=2)
+                    bert_title = combine_hidden_states(inputs, outputs)
 
                 self.news_title_bert_index = np.concatenate((self.news_title_bert_index, bert_title.numpy()),
                                                             axis=0)
