@@ -158,12 +158,21 @@ class MINDIterator(BaseIterator):
         use_CLS_token_only = False
         add_CLS_of_each_layer = True
 
+        cached_bert_pooled_output_file_name = news_file + "_" + selected_bert_model + "_" + str(use_CLS_token_only) + str(add_CLS_of_each_layer) + "_bert_index.npy"
 
-        if selected_bert_model == "tf_hub_bert_1":
+        if os.path.exists(cached_bert_pooled_output_file_name):
+            use_saved_bert = True
+        else:
+            print("File does not exist, will create new bert cache")
+
+        if use_saved_bert:
+            self.news_title_bert_index = np.load(cached_bert_pooled_output_file_name)
+
+        if (not use_saved_bert) and selected_bert_model == "tf_hub_bert_1":
             pass
             # self.news_title_bert_index = bert_results["pooled_output"]
             # self.news_title_bert_index = np.asarray(self.news_title_bert_index)
-        if selected_bert_model == "deberta":
+        if (not use_saved_bert) and selected_bert_model == "deberta":
             inputs = deberta_tokenizer(
                 text_test,
                 padding='max_length',
@@ -188,16 +197,6 @@ class MINDIterator(BaseIterator):
             # comment these two lines out when using saved bert
             self.news_title_bert_index = bert_title
             self.news_title_bert_index = np.asarray(self.news_title_bert_index)
-
-        cached_bert_pooled_output_file_name = news_file + "_" + selected_bert_model + "_" + str(use_CLS_token_only) + str(add_CLS_of_each_layer) + "_bert_index.npy"
-
-        if os.path.exists(cached_bert_pooled_output_file_name):
-            use_saved_bert = True
-        else:
-            print("File does not exist, will create new bert cache")
-
-        if use_saved_bert:
-            self.news_title_bert_index = np.load(cached_bert_pooled_output_file_name)
 
         with tf.io.gfile.GFile(news_file, "r") as rd:
             for line in rd:
