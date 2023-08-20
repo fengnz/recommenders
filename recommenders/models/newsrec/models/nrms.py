@@ -458,12 +458,19 @@ class NRMSModel(BaseModel):
                 qmask = input_mask
                 y = sequences_input_title
                 y = Fastformer(hparams.head_num,hparams.head_dim)([y, y, qmask, qmask])
+                y = layers.Dropout(hparams.dropout)(y)
+
+                # Add more one block of transformer
+
+                y = Fastformer(hparams.head_num,hparams.head_dim)([y, y, qmask, qmask])
+                y = layers.Dropout(hparams.dropout)(y)
+
             else:
                 y = sequences_input_title
                 y = SelfAttention(hparams.head_num, hparams.head_dim, seed=self.seed)([y, y, y])
+                y = layers.Dropout(hparams.dropout)(y)
 
 
-        y = layers.Dropout(hparams.dropout)(y)
         y = AttLayer2(hparams.attention_hidden_dim, seed=self.seed)(y)
 
         #sequences_input_title = net
