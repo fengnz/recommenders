@@ -81,6 +81,24 @@ class MINDIterator(BaseIterator):
         Args:
             news_file: path of news file
         """
+        def combine_CLS(a_inputs, b_outputs):
+            hidden_states = b_outputs.hidden_states  # List of hidden states (including embeddings)
+
+            # Extract CLS token from all layers except the last one
+            cls_tokens = [layer[:, 0, :] for layer in hidden_states[:]]
+
+            # the cls_tokens has a shape of (batch_size, attention_size) with length of 24 (layer number -1).
+            # reshape it to (batch_size, length -1, attention_size)
+            cls_tokens_concatenated = tf.stack(cls_tokens, axis=1)
+
+            c_input_masks = a_inputs.data["attention_mask"]
+            # Create a tensor of ones with the shape of (batch_size, num_cls_tokens, 1)
+            ones_mask = tf.ones((tf.shape(c_input_masks)[0], cls_tokens_concatenated.shape[1], 1), dtype=tf.float32)
+
+            # Concatenate the combined_hidden_state and input_masks_extended
+            combined_tensor = tf.concat([cls_tokens_concatenated, ones_mask], axis=2)
+
+            return combined_tensor
 
         def combine_hidden_states(a_inputs, b_outputs):
             hidden_states = b_outputs.hidden_states  # List of hidden states (including embeddings)
@@ -155,10 +173,13 @@ class MINDIterator(BaseIterator):
         deberta_model = TFAutoModel.from_pretrained("microsoft/deberta-v2-xlarge")
 
         selected_bert_model = "deberta"
-        use_CLS_token_only = False
-        add_CLS_of_each_layer = True
+        use_CLS_token_only = "use_CLS_token_only"
+        add_CLS_of_each_layer = "add_CLS_of_each_layer"
+        use_all_CLS_tokens_only = "use_all_CLS_tokens_only"
 
-        cached_bert_pooled_output_file_name = news_file + "_" + selected_bert_model + "_" + str(use_CLS_token_only) + str(add_CLS_of_each_layer) + "_bert_index.npy"
+        bertMode = use_all_CLS_tokens_only
+
+        cached_bert_pooled_output_file_name = news_file + "_" + selected_bert_model + "_" + bertMode + "_bert_index.npy"
 
         if os.path.exists(cached_bert_pooled_output_file_name):
             use_saved_bert = True
@@ -180,10 +201,10 @@ class MINDIterator(BaseIterator):
                 max_length=30,
                 return_tensors="tf")
             outputs = deberta_model(**inputs, output_hidden_states=True)
-            if use_CLS_token_only:
+            if bertMode == use_CLS_token_only:
                 bert_title = outputs.last_hidden_state[:, 0:1, :]
                 bert_title = tf.reshape(bert_title, (-1, 1536))
-            else:
+            elif bertMode == add_CLS_of_each_layer:
                 # bert_title = outputs.last_hidden_state[:, :, :]
                 # input_masks = inputs.data["attention_mask"]
                 # input_masks = tf.reshape(input_masks, (-1, 30, 1))
@@ -193,6 +214,8 @@ class MINDIterator(BaseIterator):
                 # bert_title = tf.concat([bert_title, input_masks], axis=2)
 
                 bert_title = combine_hidden_states(inputs, outputs)
+            elif bertMode == use_all_CLS_tokens_only:
+                bert_title = combine_CLS(inputs, outputs)
 
             # comment these two lines out when using saved bert
             self.news_title_bert_index = bert_title
@@ -234,10 +257,10 @@ class MINDIterator(BaseIterator):
                         # clear the queue
                         title_batch_prepared_for_bert = []
                         batch_count_for_bert = 0
-                        if use_CLS_token_only:
+                        if bertMode == use_CLS_token_only:
                             bert_title = outputs.last_hidden_state[:, 0:1, :]
                             bert_title = tf.reshape(bert_title, (-1, 1536))
-                        else:
+                        elif bertMode == add_CLS_of_each_layer:
                             # bert_title = outputs.last_hidden_state[:, :, :]
                             # input_masks = inputs.data["attention_mask"]
                             # input_masks = tf.reshape(input_masks, (-1, 30, 1))
@@ -245,7 +268,10 @@ class MINDIterator(BaseIterator):
                             # # concat the bert_title and masks together
                             # # will split them back to original in the news encoder
                             # bert_title = tf.concat([bert_title, input_masks], axis=2)
+
                             bert_title = combine_hidden_states(inputs, outputs)
+                        elif bertMode == use_all_CLS_tokens_only:
+                            bert_title = combine_CLS(inputs, outputs)
 
                         print(f'type of bert title:{type(bert_title)}')
                         print(f'Pooled Outputs Shape:{bert_title.shape}')
@@ -305,10 +331,10 @@ class MINDIterator(BaseIterator):
                     return_tensors="tf")
                 outputs = deberta_model(**inputs, output_hidden_states=True)
                 # clear the queue
-                if use_CLS_token_only:
+                if bertMode == use_CLS_token_only:
                     bert_title = outputs.last_hidden_state[:, 0:1, :]
                     bert_title = tf.reshape(bert_title, (-1, 1536))
-                else:
+                elif bertMode == add_CLS_of_each_layer:
                     # bert_title = outputs.last_hidden_state[:, :, :]
                     # input_masks = inputs.data["attention_mask"]
                     # input_masks = tf.reshape(input_masks, (-1, 30, 1))
@@ -316,7 +342,10 @@ class MINDIterator(BaseIterator):
                     # # concat the bert_title and masks together
                     # # will split them back to original in the news encoder
                     # bert_title = tf.concat([bert_title, input_masks], axis=2)
+
                     bert_title = combine_hidden_states(inputs, outputs)
+                elif bertMode == use_all_CLS_tokens_only:
+                    bert_title = combine_CLS(inputs, outputs)
 
                 self.news_title_bert_index = np.concatenate((self.news_title_bert_index, bert_title.numpy()),
                                                             axis=0)
