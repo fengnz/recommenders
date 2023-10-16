@@ -407,6 +407,109 @@ class NRMSModel(BaseModel):
         model.summary()
         return model
 
+    def _build_bert_newsencoder(self, embedding_layer):
+
+        """The main function to create news encoder of NRMS.
+
+        Args:
+            embedding_layer (object): a word embedding layer.
+
+        Return:
+            object: the news encoder of NRMS.
+        """
+        hparams = self.hparams
+        #sequences_input_title = keras.Input(shape=(1536,), dtype="float32", name="news_title_bert_input")
+        concated_sequences_input_title = keras.Input(shape=(hparams.deberta_states_num, 1537,), dtype="float32", name="news_title_bert_input")
+
+        # split the input masks back
+
+        input_mask = concated_sequences_input_title[:, :, 1536:]
+        input_mask = tf.squeeze(input_mask, axis=-1)
+        sequences_input_title = concated_sequences_input_title[:, :, :1536]
+
+        # try, take the first 30 only
+        def take_first_30(x):
+            return x[:, :30]
+
+
+        chain_bert = False
+
+        if chain_bert:
+            sequences_input_string_title = keras.Input(shape=(), dtype=tf.string, name="news_title_input")
+            preprocessing_layer = hub.KerasLayer(tfhub_handle_preprocess, name='preprocessing')
+            encoder_inputs = preprocessing_layer(sequences_input_string_title)
+            encoder = hub.KerasLayer(tfhub_handle_encoder, trainable=True, name='BERT_encoder')
+            outputs = encoder(encoder_inputs)
+            y = outputs['pooled_output']
+            y = tf.keras.layers.Dropout(0.1)(y)
+
+        else:
+            # the title has been processed by bert, do nothing, just return
+            # convert int 32 to float 32
+            #y = tf.keras.layers.Lambda(lambda x: tf.cast(x, 'float32'))(y)
+            #y = tf.keras.layers.Lambda(take_first_30)(sequences_input_title)
+
+            # reduced_sequences_input_title = tf.keras.layers.Dense(30)(sequences_input_title)
+            # y = tf.expand_dims(reduced_sequences_input_title, axis=-1)
+            reduced_sequences_input_title = sequences_input_title
+
+            use_fast_former = True
+            if use_fast_former:
+                # qmask=Lambda(lambda x:  K.cast(K.cast(x,'bool'),'float32'))(reduced_sequences_input_title)
+                qmask = input_mask
+                y = sequences_input_title
+                y = Fastformer(hparams.head_num,hparams.head_dim)([y, y, qmask, qmask])
+            else:
+                y = sequences_input_title
+                y = SelfAttention(hparams.head_num, hparams.head_dim, seed=self.seed)([y, y, y])
+
+
+        y = layers.Dropout(hparams.dropout)(y)
+        y = AttLayer2(hparams.attention_hidden_dim, seed=self.seed)(y)
+
+        #sequences_input_title = net
+
+        #qmask=Lambda(lambda x:  K.cast(K.cast(x,'bool'),'float32'))(sequences_input_title)
+
+        #embedded_sequences_title = embedding_layer(sequences_input_title)
+        #print("embedded_sequences_title.shape")
+        #print(embedded_sequences_title.shape)
+
+        #y = layers.Dropout(hparams.dropout)(embedded_sequences_title)
+
+        #print('looks good')
+
+        #useFastFormer = 2
+
+        #print('Use Fast Former: ')
+        #print(str(useFastFormer))
+
+        #if (useFastFormer == 1):
+        #    # This one doesn't work'
+        #    mask = tf.ones([1, 300], dtype=tf.bool)
+        #    model = FastTransformer(
+        #        num_tokens = hparams.head_num,
+        #        dim = hparams.head_dim,
+        #        depth = 2,
+        #        max_seq_len = 300,
+        #        absolute_pos_emb = None, # Absolute positional embeddings
+        #        mask = mask
+        #    )
+        #    # x = tf.experimental.numpy.random.randint(0, 20000, (1, 4096))
+        #    # fast_former_layer = model(x)
+
+        #    y = model(y)
+        #elif (useFastFormer == 2):
+        #    y = Fastformer(20,20)([y,y,qmask,qmask])
+        #else:
+        #    y = SelfAttention(hparams.head_num, hparams.head_dim, seed=self.seed)([y, y, y])
+
+        #y = layers.Dropout(hparams.dropout)(y)
+        #pred_title = AttLayer2(hparams.attention_hidden_dim, seed=self.seed)(y)
+
+        model = keras.Model(concated_sequences_input_title, y, name="news_encoder")
+        print(model.summary())
+        return model
     def _build_newsencoder(self, embedding_layer):
 
         """The main function to create news encoder of NRMS.
@@ -592,7 +695,7 @@ class NRMSModel(BaseModel):
             trainable=True,
         )
 
-        titleencoder = self._build_newsencoder(embedding_layer)
+        titleencoder = self._build_bert_newsencoder(embedding_layer)
         self.userencoder = self._build_userencoder(titleencoder)
         self.newsencoder = titleencoder
 
