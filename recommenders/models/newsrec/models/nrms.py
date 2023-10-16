@@ -407,7 +407,18 @@ class NRMSModel(BaseModel):
         model.summary()
         return model
 
-    def _build_bert_newsencoder(self, embedding_layer):
+
+    def _build_news_title_encoder(self, title_encoder, bert_title_encoder):
+        hparams = self.hparams
+        concated_sequences_input_title = keras.Input(shape=(hparams.deberta_states_num, 1537,), dtype="float32", name="news_title_bert_input")
+        y = bert_title_encoder(concated_sequences_input_title)
+
+        model = keras.Model(concated_sequences_input_title, y, name="news_encoder")
+        print(model.summary())
+        return model
+
+
+    def _build_bert_newsencoder(self):
 
         """The main function to create news encoder of NRMS.
 
@@ -695,9 +706,12 @@ class NRMSModel(BaseModel):
             trainable=True,
         )
 
-        titleencoder = self._build_bert_newsencoder(embedding_layer)
-        self.userencoder = self._build_userencoder(titleencoder)
-        self.newsencoder = titleencoder
+        bert_title_encoder = self._build_bert_newsencoder()
+
+        news_encoder = self._build_news_title_encoder(bert_title_encoder, bert_title_encoder)
+
+        self.userencoder = self._build_userencoder(news_encoder)
+        self.newsencoder = news_encoder
 
         # reshaped_pred_input_string_title = tf.expand_dims(pred_input_string_title, axis=-1)
 
