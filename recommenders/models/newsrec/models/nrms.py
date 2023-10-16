@@ -372,11 +372,11 @@ class NRMSModel(BaseModel):
         model, scorer = self._build_nrms()
         return model, scorer
 
-    def _build_userencoder(self, titleencoder):
+    def _build_userencoder(self, multi_news_encoder):
         """The main function to create user encoder of NRMS.
 
         Args:
-            titleencoder (object): the news encoder of NRMS.
+            multi_news_encoder (object): the news encoder of NRMS.
 
         Return:
             object: the user encoder of NRMS.
@@ -397,7 +397,8 @@ class NRMSModel(BaseModel):
         #
         # reshaped_his_input_string_title = tf.expand_dims(his_input_string_title, axis=-1)
 
-        click_title_presents = layers.TimeDistributed(titleencoder)(his_input_title_bert)
+        click_title_presents = multi_news_encoder([his_input_title_bert, his_input_title_bert])
+
         y = SelfAttention(hparams.head_num, hparams.head_dim, seed=self.seed)(
             [click_title_presents] * 3
         )
@@ -408,12 +409,42 @@ class NRMSModel(BaseModel):
         return model
 
 
-    def _build_news_title_encoder(self, title_encoder, bert_title_encoder):
-        hparams = self.hparams
-        concated_sequences_input_title = keras.Input(shape=(hparams.deberta_states_num, 1537,), dtype="float32", name="news_title_bert_input")
-        y = bert_title_encoder(concated_sequences_input_title)
+    def _build_multi_news_title_encoder(self, title_encoder, bert_title_encoder):
 
-        model = keras.Model(concated_sequences_input_title, y, name="news_encoder")
+        dim_title = 1537
+        dim_bert_title = 1537
+
+        hparams = self.hparams
+        his_input_title= keras.Input( shape=(None, hparams.deberta_states_num, 1537), dtype="float32" )
+        his_input_title_bert = keras.Input( shape=(None, hparams.deberta_states_num, 1537), dtype="float32" )
+        multi_news_presents = layers.TimeDistributed(title_encoder)(his_input_title)
+        bert_multi_news_presents = layers.TimeDistributed(bert_title_encoder)(his_input_title_bert)
+
+        y = layers.Add()([multi_news_presents, bert_multi_news_presents])
+
+        model = keras.Model([his_input_title, his_input_title_bert], y, name="multi_news_title_encoder")
+        print(model.summary())
+        return model
+
+    def _build_news_title_encoder(self, title_encoder, bert_title_encoder):
+
+        # because we need to apply Time_Districuted layer to the news title encoder, so that
+        # the news title encoder can only take one parameters.
+        # We need to concat the title and bert title along with the sequence and then split to two here
+
+        dim_title = 1537
+        dim_bert_title = 1537
+
+        hparams = self.hparams
+        concated_sequences_input_title = keras.Input(shape=(hparams.deberta_states_num, dim_title), dtype="float32", name="news_title_input")
+        bert_concated_sequences_input_title = keras.Input(shape=(hparams.deberta_states_num, dim_bert_title), dtype="float32", name="news_title_bert_input")
+
+        y1 = title_encoder(concated_sequences_input_title)
+        y2 = bert_title_encoder(bert_concated_sequences_input_title)
+
+        y = layers.Add()([y1, y2])
+
+        model = keras.Model([concated_sequences_input_title, bert_concated_sequences_input_title], y, name="news_title_encoder")
         print(model.summary())
         return model
 
@@ -518,7 +549,7 @@ class NRMSModel(BaseModel):
         #y = layers.Dropout(hparams.dropout)(y)
         #pred_title = AttLayer2(hparams.attention_hidden_dim, seed=self.seed)(y)
 
-        model = keras.Model(concated_sequences_input_title, y, name="news_encoder")
+        model = keras.Model(concated_sequences_input_title, y, name="bert_title_encoder")
         print(model.summary())
         return model
     def _build_newsencoder(self, embedding_layer):
@@ -621,7 +652,7 @@ class NRMSModel(BaseModel):
         #y = layers.Dropout(hparams.dropout)(y)
         #pred_title = AttLayer2(hparams.attention_hidden_dim, seed=self.seed)(y)
 
-        model = keras.Model(concated_sequences_input_title, y, name="news_encoder")
+        model = keras.Model(concated_sequences_input_title, y, name="title_encoder")
         print(model.summary())
         return model
 
@@ -706,21 +737,19 @@ class NRMSModel(BaseModel):
             trainable=True,
         )
 
+        title_encoder = self._build_newsencoder(embedding_layer)
         bert_title_encoder = self._build_bert_newsencoder()
 
-        news_encoder = self._build_news_title_encoder(bert_title_encoder, bert_title_encoder)
+        news_encoder = self._build_news_title_encoder(title_encoder, bert_title_encoder)
+        multi_news_encoder = self._build_multi_news_title_encoder(title_encoder, bert_title_encoder)
 
-        self.userencoder = self._build_userencoder(news_encoder)
+        self.userencoder = self._build_userencoder(multi_news_encoder)
         self.newsencoder = news_encoder
 
-        # reshaped_pred_input_string_title = tf.expand_dims(pred_input_string_title, axis=-1)
-
         user_present = self.userencoder(his_input_title_bert)
-        # news_present = layers.TimeDistributed(self.newsencoder)(reshaped_pred_input_string_title)
-        news_present = layers.TimeDistributed(self.newsencoder)(pred_input_title_bert)
-
-        # news_present_one = self.newsencoder(pred_string_title_one_reshape)
-        news_present_one = self.newsencoder(pred_title_bert_one_reshape)
+        # concate title and bert title
+        news_present = multi_news_encoder([pred_input_title_bert, pred_input_title_bert])
+        news_present_one = news_encoder([pred_title_bert_one_reshape, pred_title_bert_one_reshape])
 
         preds = layers.Dot(axes=-1)([news_present, user_present])
         preds = layers.Activation(activation="softmax")(preds)

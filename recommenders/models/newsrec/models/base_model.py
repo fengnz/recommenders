@@ -356,7 +356,7 @@ class BaseModel:
 
     def news(self, batch_news_input):
         news_input = self._get_news_feature_from_iter(batch_news_input)
-        news_vec = self.newsencoder.predict_on_batch(news_input)
+        news_vec = self.newsencoder.predict_on_batch([news_input, news_input])
         news_index = batch_news_input["news_index_batch"]
 
         return news_index, news_vec
