@@ -350,7 +350,8 @@ class NRMSModel(BaseModel):
             numpy.ndarray: input user feature (clicked title batch)
         """
         # return batch_data["clicked_title_string_batch"]
-        return batch_data["clicked_title_bert_batch"]
+        #return batch_data["clicked_title_bert_batch"]
+        return [batch_data["clicked_title_batch"], batch_data["clicked_title_bert_batch"]]
 
     def _get_news_feature_from_iter(self, batch_data):
         """get input of news encoder
@@ -360,7 +361,7 @@ class NRMSModel(BaseModel):
         Returns:
             numpy.ndarray: input news feature (candidate title batch)
         """
-        return batch_data["candidate_title_bert_batch"]
+        return [batch_data["candidate_title_batch"], batch_data["candidate_title_bert_batch"]]
 
     def _build_graph(self):
         """Build NRMS model and scorer.
@@ -382,9 +383,9 @@ class NRMSModel(BaseModel):
             object: the user encoder of NRMS.
         """
         hparams = self.hparams
-        #his_input_title = keras.Input(
-        #    shape=(hparams.his_size, hparams.title_size), dtype="int32"
-        #)
+        his_input_title = keras.Input(
+           shape=(hparams.his_size, hparams.title_size), dtype="int32"
+        )
 
         his_input_title_bert = keras.Input(
         #   shape=(hparams.his_size, hparams.deberta_states_num, 1537), dtype="float32"
@@ -397,14 +398,14 @@ class NRMSModel(BaseModel):
         #
         # reshaped_his_input_string_title = tf.expand_dims(his_input_string_title, axis=-1)
 
-        click_title_presents = multi_news_encoder([his_input_title_bert, his_input_title_bert])
+        click_title_presents = multi_news_encoder([his_input_title, his_input_title_bert])
 
         y = SelfAttention(hparams.head_num, hparams.head_dim, seed=self.seed)(
             [click_title_presents] * 3
         )
         user_present = AttLayer2(hparams.attention_hidden_dim, seed=self.seed)(y)
 
-        model = keras.Model(his_input_title_bert, user_present, name="user_encoder")
+        model = keras.Model([his_input_title, his_input_title_bert], user_present, name="user_encoder")
         model.summary()
         return model
 
@@ -415,12 +416,17 @@ class NRMSModel(BaseModel):
         dim_bert_title = 1537
 
         hparams = self.hparams
-        his_input_title= keras.Input( shape=(None, hparams.deberta_states_num, 1537), dtype="float32" )
+        his_input_title = keras.Input(
+            shape=(None, hparams.title_size), dtype="int32"
+        )
         his_input_title_bert = keras.Input( shape=(None, hparams.deberta_states_num, 1537), dtype="float32" )
         multi_news_presents = layers.TimeDistributed(title_encoder)(his_input_title)
+        multi_news_presents = Normalization()(multi_news_presents)
         bert_multi_news_presents = layers.TimeDistributed(bert_title_encoder)(his_input_title_bert)
+        bert_multi_news_presents = Normalization()(bert_multi_news_presents)
 
-        y = layers.Add()([multi_news_presents, bert_multi_news_presents])
+        # y = layers.Add()([multi_news_presents, bert_multi_news_presents])
+        y = Lambda(lambda x: 0.7 * x[0] + 0.3 * x[1])([multi_news_presents, bert_multi_news_presents])
 
         model = keras.Model([his_input_title, his_input_title_bert], y, name="multi_news_title_encoder")
         print(model.summary())
@@ -436,15 +442,17 @@ class NRMSModel(BaseModel):
         dim_bert_title = 1537
 
         hparams = self.hparams
-        concated_sequences_input_title = keras.Input(shape=(hparams.deberta_states_num, dim_title), dtype="float32", name="news_title_input")
+        sequences_input_title = keras.Input(shape=(hparams.title_size,), dtype="int32")
+
         bert_concated_sequences_input_title = keras.Input(shape=(hparams.deberta_states_num, dim_bert_title), dtype="float32", name="news_title_bert_input")
 
-        y1 = title_encoder(concated_sequences_input_title)
+        y1 = title_encoder(sequences_input_title)
         y2 = bert_title_encoder(bert_concated_sequences_input_title)
 
-        y = layers.Add()([y1, y2])
+        # y = layers.Add()([y1, y2])
+        y = Lambda(lambda x: 0.7 * x[0] + 0.3 * x[1])([y1, y2])
 
-        model = keras.Model([concated_sequences_input_title, bert_concated_sequences_input_title], y, name="news_title_encoder")
+        model = keras.Model([sequences_input_title, bert_concated_sequences_input_title], y, name="news_title_encoder")
         print(model.summary())
         return model
 
@@ -553,108 +561,38 @@ class NRMSModel(BaseModel):
         print(model.summary())
         return model
     def _build_newsencoder(self, embedding_layer):
-
-        """The main function to create news encoder of NRMS.
-
-        Args:
-            embedding_layer (object): a word embedding layer.
-
-        Return:
-            object: the news encoder of NRMS.
-        """
         hparams = self.hparams
-        #sequences_input_title = keras.Input(shape=(1536,), dtype="float32", name="news_title_bert_input")
-        concated_sequences_input_title = keras.Input(shape=(hparams.deberta_states_num, 1537,), dtype="float32", name="news_title_bert_input")
+        sequences_input_title = keras.Input(shape=(hparams.title_size,), dtype="int32")
 
-        # split the input masks back
+        qmask=Lambda(lambda x:  K.cast(K.cast(x,'bool'),'float32'))(sequences_input_title)
 
-        input_mask = concated_sequences_input_title[:, :, 1536:]
-        input_mask = tf.squeeze(input_mask, axis=-1)
-        sequences_input_title = concated_sequences_input_title[:, :, :1536]
+        embedded_sequences_title = embedding_layer(sequences_input_title)
+        print("embedded_sequences_title.shape")
+        print(embedded_sequences_title.shape)
 
-        # try, take the first 30 only
-        def take_first_30(x):
-            return x[:, :30]
+        y = layers.Dropout(hparams.dropout)(embedded_sequences_title)
 
+        print('looks good')
 
-        chain_bert = False
+        useFastFormer = 2
 
-        if chain_bert:
-            sequences_input_string_title = keras.Input(shape=(), dtype=tf.string, name="news_title_input")
-            preprocessing_layer = hub.KerasLayer(tfhub_handle_preprocess, name='preprocessing')
-            encoder_inputs = preprocessing_layer(sequences_input_string_title)
-            encoder = hub.KerasLayer(tfhub_handle_encoder, trainable=True, name='BERT_encoder')
-            outputs = encoder(encoder_inputs)
-            y = outputs['pooled_output']
-            y = tf.keras.layers.Dropout(0.1)(y)
+        print('Use Fast Former: ')
+        print(str(useFastFormer))
 
+        if (useFastFormer == 1):
+            pass
+        elif (useFastFormer == 2):
+            y = Fastformer(20,20)([y,y,qmask,qmask])
         else:
-            # the title has been processed by bert, do nothing, just return
-            # convert int 32 to float 32
-            #y = tf.keras.layers.Lambda(lambda x: tf.cast(x, 'float32'))(y)
-            #y = tf.keras.layers.Lambda(take_first_30)(sequences_input_title)
-
-            # reduced_sequences_input_title = tf.keras.layers.Dense(30)(sequences_input_title)
-            # y = tf.expand_dims(reduced_sequences_input_title, axis=-1)
-            reduced_sequences_input_title = sequences_input_title
-
-            use_fast_former = True
-            if use_fast_former:
-                # qmask=Lambda(lambda x:  K.cast(K.cast(x,'bool'),'float32'))(reduced_sequences_input_title)
-                qmask = input_mask
-                y = sequences_input_title
-                y = Fastformer(hparams.head_num,hparams.head_dim)([y, y, qmask, qmask])
-            else:
-                y = sequences_input_title
-                y = SelfAttention(hparams.head_num, hparams.head_dim, seed=self.seed)([y, y, y])
-
+            y = SelfAttention(hparams.head_num, hparams.head_dim, seed=self.seed)([y, y, y])
 
         y = layers.Dropout(hparams.dropout)(y)
-        y = AttLayer2(hparams.attention_hidden_dim, seed=self.seed)(y)
+        pred_title = AttLayer2(hparams.attention_hidden_dim, seed=self.seed)(y)
 
-        #sequences_input_title = net
-
-        #qmask=Lambda(lambda x:  K.cast(K.cast(x,'bool'),'float32'))(sequences_input_title)
-
-        #embedded_sequences_title = embedding_layer(sequences_input_title)
-        #print("embedded_sequences_title.shape")
-        #print(embedded_sequences_title.shape)
-
-        #y = layers.Dropout(hparams.dropout)(embedded_sequences_title)
-
-        #print('looks good')
-
-        #useFastFormer = 2
-
-        #print('Use Fast Former: ')
-        #print(str(useFastFormer))
-
-        #if (useFastFormer == 1):
-        #    # This one doesn't work'
-        #    mask = tf.ones([1, 300], dtype=tf.bool)
-        #    model = FastTransformer(
-        #        num_tokens = hparams.head_num,
-        #        dim = hparams.head_dim,
-        #        depth = 2,
-        #        max_seq_len = 300,
-        #        absolute_pos_emb = None, # Absolute positional embeddings
-        #        mask = mask
-        #    )
-        #    # x = tf.experimental.numpy.random.randint(0, 20000, (1, 4096))
-        #    # fast_former_layer = model(x)
-
-        #    y = model(y)
-        #elif (useFastFormer == 2):
-        #    y = Fastformer(20,20)([y,y,qmask,qmask])
-        #else:
-        #    y = SelfAttention(hparams.head_num, hparams.head_dim, seed=self.seed)([y, y, y])
-
-        #y = layers.Dropout(hparams.dropout)(y)
-        #pred_title = AttLayer2(hparams.attention_hidden_dim, seed=self.seed)(y)
-
-        model = keras.Model(concated_sequences_input_title, y, name="title_encoder")
+        model = keras.Model(sequences_input_title, pred_title, name="news_encoder")
         print(model.summary())
         return model
+
 
     def _build_nrms(self):
         """The main function to create NRMS's logic. The core of NRMS
@@ -746,10 +684,10 @@ class NRMSModel(BaseModel):
         self.userencoder = self._build_userencoder(multi_news_encoder)
         self.newsencoder = news_encoder
 
-        user_present = self.userencoder(his_input_title_bert)
+        user_present = self.userencoder([his_input_title, his_input_title_bert])
         # concate title and bert title
-        news_present = multi_news_encoder([pred_input_title_bert, pred_input_title_bert])
-        news_present_one = news_encoder([pred_title_bert_one_reshape, pred_title_bert_one_reshape])
+        news_present = multi_news_encoder([pred_input_title, pred_input_title_bert])
+        news_present_one = news_encoder([pred_title_one_reshape, pred_title_bert_one_reshape])
 
         preds = layers.Dot(axes=-1)([news_present, user_present])
         preds = layers.Activation(activation="softmax")(preds)
