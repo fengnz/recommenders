@@ -22,12 +22,12 @@ tf.config.list_physical_devices()
 
 
 #%%
-epochs = 5
+epochs = 1
 seed = 42
 batch_size = 32
 
 # Options: demo, small, large
-MIND_type = 'demo'
+MIND_type = 'large'
 
 tmpdir = TemporaryDirectory()
 data_path = '/Users/fennng/Documents/phd/jupyter/nrms/' + MIND_type
@@ -67,7 +67,7 @@ iterator = MINDIterator
 model = NRMSModel(hparams, iterator, seed=seed)
 #%%
 print('do a quick eval before fit')
-print(model.run_eval(valid_news_file, valid_behaviors_file))
+#print(model.run_eval(valid_news_file, valid_behaviors_file))
 #%%
 
 #%%
@@ -76,5 +76,5 @@ print(model.run_eval(valid_news_file, valid_behaviors_file))
 
 #%%
 model.fit(train_news_file, train_behaviors_file, valid_news_file, valid_behaviors_file)
-res_syn = model.run_eval(valid_news_file, valid_behaviors_file)
-print(res_syn)
+#res_syn = model.run_eval(valid_news_file, valid_behaviors_file)
+#print(res_syn)

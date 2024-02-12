@@ -2,6 +2,7 @@
 # Licensed under the MIT License.
 
 import tensorflow.keras as keras
+from memory_profiler import profile
 from tensorflow.keras import layers
 import tensorflow as tf
 tf.compat.v1.experimental.output_all_intermediates(True)
@@ -295,6 +296,7 @@ class NRMSModel(BaseModel):
         hparam (object): Global hyper-parameters.
     """
 
+    #@profile
     def __init__(
         self,
         hparams,

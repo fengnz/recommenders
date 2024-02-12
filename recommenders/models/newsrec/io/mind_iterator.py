@@ -189,37 +189,43 @@ class MINDIterator(BaseIterator):
         if use_saved_bert:
             self.news_title_bert_index = np.load(cached_bert_pooled_output_file_name)
 
+        use_fake_data = True
         if (not use_saved_bert) and selected_bert_model == "tf_hub_bert_1":
             pass
             # self.news_title_bert_index = bert_results["pooled_output"]
             # self.news_title_bert_index = np.asarray(self.news_title_bert_index)
         if (not use_saved_bert) and selected_bert_model == "deberta":
-            inputs = deberta_tokenizer(
-                text_test,
-                padding='max_length',
-                truncation=True,
-                max_length=30,
-                return_tensors="tf")
-            outputs = deberta_model(**inputs, output_hidden_states=True)
-            if bertMode == use_CLS_token_only:
-                bert_title = outputs.last_hidden_state[:, 0:1, :]
-                bert_title = tf.reshape(bert_title, (-1, 1536))
-            elif bertMode == add_CLS_of_each_layer:
-                # bert_title = outputs.last_hidden_state[:, :, :]
-                # input_masks = inputs.data["attention_mask"]
-                # input_masks = tf.reshape(input_masks, (-1, 30, 1))
-                # input_masks = tf.cast(input_masks, tf.float32)
-                # # concat the bert_title and masks together
-                # # will split them back to original in the news encoder
-                # bert_title = tf.concat([bert_title, input_masks], axis=2)
 
-                bert_title = combine_hidden_states(inputs, outputs)
-            elif bertMode == use_all_CLS_tokens_only:
-                bert_title = combine_CLS(inputs, outputs)
+            if (use_fake_data):
+                self.news_title_bert_index = np.zeros((1, 25, 1537), dtype="float32")
+            else:
+                inputs = deberta_tokenizer(
+                    text_test,
+                    padding='max_length',
+                    truncation=True,
+                    max_length=30,
+                    return_tensors="tf")
+                outputs = deberta_model(**inputs, output_hidden_states=True)
+                if bertMode == use_CLS_token_only:
+                    bert_title = outputs.last_hidden_state[:, 0:1, :]
+                    bert_title = tf.reshape(bert_title, (-1, 1536))
+                elif bertMode == add_CLS_of_each_layer:
+                    # bert_title = outputs.last_hidden_state[:, :, :]
+                    # input_masks = inputs.data["attention_mask"]
+                    # input_masks = tf.reshape(input_masks, (-1, 30, 1))
+                    # input_masks = tf.cast(input_masks, tf.float32)
+                    # # concat the bert_title and masks together
+                    # # will split them back to original in the news encoder
+                    # bert_title = tf.concat([bert_title, input_masks], axis=2)
 
-            # comment these two lines out when using saved bert
-            self.news_title_bert_index = bert_title
-            self.news_title_bert_index = np.asarray(self.news_title_bert_index)
+                    bert_title = combine_hidden_states(inputs, outputs)
+                elif bertMode == use_all_CLS_tokens_only:
+                    bert_title = combine_CLS(inputs, outputs)
+
+                # comment these two lines out when using saved bert
+                self.news_title_bert_index = bert_title
+                self.news_title_bert_index = np.asarray(self.news_title_bert_index)
+
 
         with tf.io.gfile.GFile(news_file, "r") as rd:
             for line in rd:
@@ -247,37 +253,44 @@ class MINDIterator(BaseIterator):
 
                 if not use_saved_bert and batch_count_for_bert == batch_size_for_bert:
                     if selected_bert_model == "deberta":
-                        inputs = deberta_tokenizer(
-                            title_batch_prepared_for_bert,
-                            padding='max_length',
-                            truncation=True,
-                            max_length=30,
-                            return_tensors="tf")
-                        outputs = deberta_model(**inputs, output_hidden_states=True)
-                        # clear the queue
-                        title_batch_prepared_for_bert = []
-                        batch_count_for_bert = 0
-                        if bertMode == use_CLS_token_only:
-                            bert_title = outputs.last_hidden_state[:, 0:1, :]
-                            bert_title = tf.reshape(bert_title, (-1, 1536))
-                        elif bertMode == add_CLS_of_each_layer:
-                            # bert_title = outputs.last_hidden_state[:, :, :]
-                            # input_masks = inputs.data["attention_mask"]
-                            # input_masks = tf.reshape(input_masks, (-1, 30, 1))
-                            # input_masks = tf.cast(input_masks, tf.float32)
-                            # # concat the bert_title and masks together
-                            # # will split them back to original in the news encoder
-                            # bert_title = tf.concat([bert_title, input_masks], axis=2)
+                        if (use_fake_data):
+                            title_batch_prepared_for_bert = []
+                            batch_count_for_bert = 0
 
-                            bert_title = combine_hidden_states(inputs, outputs)
-                        elif bertMode == use_all_CLS_tokens_only:
-                            bert_title = combine_CLS(inputs, outputs)
+                            self.news_title_bert_index = np.concatenate((self.news_title_bert_index, np.zeros((128, 25, 1537), dtype="float32")), axis=0)
+                        else:
+                            inputs = deberta_tokenizer(
+                                title_batch_prepared_for_bert,
+                                padding='max_length',
+                                truncation=True,
+                                max_length=30,
+                                return_tensors="tf")
+                            outputs = deberta_model(**inputs, output_hidden_states=True)
+                            # clear the queue
+                            title_batch_prepared_for_bert = []
+                            batch_count_for_bert = 0
+                            if bertMode == use_CLS_token_only:
+                                bert_title = outputs.last_hidden_state[:, 0:1, :]
+                                bert_title = tf.reshape(bert_title, (-1, 1536))
+                            elif bertMode == add_CLS_of_each_layer:
+                                # bert_title = outputs.last_hidden_state[:, :, :]
+                                # input_masks = inputs.data["attention_mask"]
+                                # input_masks = tf.reshape(input_masks, (-1, 30, 1))
+                                # input_masks = tf.cast(input_masks, tf.float32)
+                                # # concat the bert_title and masks together
+                                # # will split them back to original in the news encoder
+                                # bert_title = tf.concat([bert_title, input_masks], axis=2)
 
-                        print(f'type of bert title:{type(bert_title)}')
-                        print(f'Pooled Outputs Shape:{bert_title.shape}')
+                                bert_title = combine_hidden_states(inputs, outputs)
+                            elif bertMode == use_all_CLS_tokens_only:
+                                bert_title = combine_CLS(inputs, outputs)
 
-                        self.news_title_bert_index = np.concatenate((self.news_title_bert_index, bert_title.numpy()),
-                                                                    axis=0)
+                            print(f'type of bert title:{type(bert_title)}')
+                            print(f'Pooled Outputs Shape:{bert_title.shape}')
+
+                            self.news_title_bert_index = np.concatenate((self.news_title_bert_index, bert_title.numpy()), axis=0)
+
+
                         print(f'self bert titles Shape:{self.news_title_bert_index.shape}')
                     if selected_bert_model == "tf_hub_bert_1":
                         pass

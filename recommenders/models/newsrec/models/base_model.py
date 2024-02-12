@@ -4,6 +4,7 @@
 import abc
 import time
 import numpy as np
+from memory_profiler import profile
 from tqdm import tqdm
 import tensorflow as tf
 from tensorflow.compat.v1 import keras
@@ -188,6 +189,7 @@ class BaseModel:
 
         return pred_rslt, eval_label, imp_index
 
+    #@profile
     def fit(
         self,
         train_news_file,
@@ -221,9 +223,11 @@ class BaseModel:
                 )
             )
 
+
             for batch_data_input in tqdm_util:
 
-                step_result = self.train(batch_data_input)
+                #step_result = self.train(batch_data_input)
+                step_result = 2.675
                 step_data_loss = step_result
 
                 epoch_loss += step_data_loss
@@ -234,6 +238,8 @@ class BaseModel:
                             step, epoch_loss / step, step_data_loss
                         )
                     )
+
+            return self
 
             train_end = time.time()
             train_time = train_end - train_start
