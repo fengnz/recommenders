@@ -226,8 +226,8 @@ class BaseModel:
 
             for batch_data_input in tqdm_util:
 
-                #step_result = self.train(batch_data_input)
-                step_result = 2.675
+                step_result = self.train(batch_data_input)
+                #step_result = 2.675
                 step_data_loss = step_result
 
                 epoch_loss += step_data_loss

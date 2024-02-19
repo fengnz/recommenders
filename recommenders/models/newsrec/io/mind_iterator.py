@@ -1,6 +1,6 @@
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License.
-
+import math
 import os
 import tensorflow as tf
 import numpy as np
@@ -159,8 +159,21 @@ class MINDIterator(BaseIterator):
         count = 0
 
         batch_size_for_bert = 64
-        batch_count_for_bert = 0;
-        title_batch_prepared_for_bert = [];
+        batch_count_for_bert = 0
+        title_batch_prepared_for_bert = []
+        maxElementsPerFile = batch_size_for_bert * 100
+
+
+        fileLinesDict = {
+            'demo': 26740,
+            'small': 51282,
+            'large': 101527
+        }
+
+
+        fileLinesKey = os.environ.get("MIND_type")
+
+        fileLines = fileLinesDict[fileLinesKey] + 1
 
         use_saved_bert = False
 
@@ -186,8 +199,27 @@ class MINDIterator(BaseIterator):
         else:
             print("File does not exist, will create new bert cache")
 
+        memory_map_writer = None
         if use_saved_bert:
-            self.news_title_bert_index = np.load(cached_bert_pooled_output_file_name)
+            #self.news_title_bert_index = np.load(cached_bert_pooled_output_file_name)
+            # number_of_files = math.floor(fileLines)/maxElementsPerFile
+            # number_of_elements_last_file = fileLines - number_of_files * maxElementsPerFile
+            # memory_map = None
+            # for i in range(number_of_files + 1):
+            #     shape1 = maxElementsPerFile
+            #     if i == number_of_files:
+            #         shape1 = number_of_elements_last_file
+            #     mmapped_array = np.memmap(cached_bert_pooled_output_file_name + "." + fileLinesKey + ".npy", dtype='float32', mode='r', shape=(shape1,))
+            #     if memory_map is None:
+            #         memory_map = mmapped_array
+            #     else:
+            #         memory_map = np.hstack((memory_map, mmapped_array))
+
+            memory_map = np.memmap(cached_bert_pooled_output_file_name, dtype='float32', mode='r', shape=(fileLines,25, 1537))
+            self.news_title_bert_index = memory_map
+        else:
+            memory_map_writer = np.memmap(cached_bert_pooled_output_file_name, dtype='float32', mode='w+', shape=(fileLines,25, 1537))
+
 
         use_fake_data = True
         if (not use_saved_bert) and selected_bert_model == "tf_hub_bert_1":
@@ -197,7 +229,11 @@ class MINDIterator(BaseIterator):
         if (not use_saved_bert) and selected_bert_model == "deberta":
 
             if (use_fake_data):
-                self.news_title_bert_index = np.zeros((1, 25, 1537), dtype="float32")
+                firstLine = np.zeros((1, 25, 1537), dtype="float32")
+                #self.news_title_bert_index = firstLine
+                memory_map_writer[0] = firstLine
+                memory_map_writer.flush()
+
             else:
                 inputs = deberta_tokenizer(
                     text_test,
@@ -223,8 +259,10 @@ class MINDIterator(BaseIterator):
                     bert_title = combine_CLS(inputs, outputs)
 
                 # comment these two lines out when using saved bert
-                self.news_title_bert_index = bert_title
-                self.news_title_bert_index = np.asarray(self.news_title_bert_index)
+                # self.news_title_bert_index = bert_title
+                # self.news_title_bert_index = np.asarray(self.news_title_bert_index)
+                memory_map_writer[0] = bert_title
+                memory_map_writer.flush()
 
 
         with tf.io.gfile.GFile(news_file, "r") as rd:
@@ -257,7 +295,16 @@ class MINDIterator(BaseIterator):
                             title_batch_prepared_for_bert = []
                             batch_count_for_bert = 0
 
-                            self.news_title_bert_index = np.concatenate((self.news_title_bert_index, np.zeros((batch_size_for_bert, 25, 1537), dtype="float32")), axis=0)
+                            fake_title = np.ones((batch_size_for_bert, 25, 1537), dtype="float32")
+                            #self.news_title_bert_index = np.concatenate((self.news_title_bert_index, fake_title), axis=0)
+
+                            # need to add 1, as the first element is taken
+                            begin = count + 1 - batch_size_for_bert
+                            end = count + 1
+                            for i in range(begin, end):
+                                memory_map_writer[i] = fake_title[i - begin]
+                            memory_map_writer.flush()
+
                         else:
                             inputs = deberta_tokenizer(
                                 title_batch_prepared_for_bert,
@@ -288,10 +335,16 @@ class MINDIterator(BaseIterator):
                             print(f'type of bert title:{type(bert_title)}')
                             print(f'Pooled Outputs Shape:{bert_title.shape}')
 
-                            self.news_title_bert_index = np.concatenate((self.news_title_bert_index, bert_title.numpy()), axis=0)
+                            #self.news_title_bert_index = np.concatenate((self.news_title_bert_index, bert_title.numpy()), axis=0)
+                            begin = count + 1 - batch_size_for_bert
+                            end = count + 1
+                            for i in range(begin, end):
+                                memory_map_writer[i] = bert_title[i - begin]
+                            memory_map_writer.flush()
 
 
-                        print(f'self bert titles Shape:{self.news_title_bert_index.shape}')
+                        print(count)
+                        # print(f'self bert titles Shape:{self.news_title_bert_index.shape}')
                     if selected_bert_model == "tf_hub_bert_1":
                         pass
                         # text queue is full, start process
@@ -360,11 +413,15 @@ class MINDIterator(BaseIterator):
                 elif bertMode == use_all_CLS_tokens_only:
                     bert_title = combine_CLS(inputs, outputs)
 
-                self.news_title_bert_index = np.concatenate((self.news_title_bert_index, bert_title.numpy()),
-                                                            axis=0)
+                #self.news_title_bert_index = np.concatenate((self.news_title_bert_index, bert_title.numpy()), axis=0)
+                begin = count + 1 - batch_count_for_bert
+                end = count + 1
+                for i in range(begin, end):
+                    memory_map_writer[i] = bert_title[i - begin]
+                memory_map_writer.flush()
                 title_batch_prepared_for_bert = []
                 batch_count_for_bert = 0
-                print(f'self bert titles Shape:{self.news_title_bert_index.shape}')
+                # print(f'self bert titles Shape:{self.news_title_bert_index.shape}')
 
         # convert news_title list to ndarray
         self.news_title = np.asarray(self.news_title)
@@ -379,10 +436,19 @@ class MINDIterator(BaseIterator):
         print(self.news_title.shape)
 
         print("the bert title shape is ")
-        print(self.news_title_bert_index.shape)
+        # print(self.news_title_bert_index.shape)
+
+        if memory_map_writer is not None:
+            memory_map_writer.flush()
+
 
         if not use_saved_bert:
-            np.save(cached_bert_pooled_output_file_name, self.news_title_bert_index)
+            #np.save(cached_bert_pooled_output_file_name, self.news_title_bert_index)
+            memory_map = np.memmap(cached_bert_pooled_output_file_name, dtype='float32', mode='r', shape=(fileLines, 25, 1357))
+            self.news_title_bert_index = memory_map
+
+
+        print(f'self bert titles Shape:{self.news_title_bert_index.shape}')
 
         self.news_title_index = np.zeros(
             (len(news_title), self.title_size), dtype="int32"

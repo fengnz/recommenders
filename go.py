@@ -27,7 +27,9 @@ seed = 42
 batch_size = 32
 
 # Options: demo, small, large
-MIND_type = 'large'
+MIND_type = 'demo'
+
+os.environ["MIND_type"] = MIND_type
 
 tmpdir = TemporaryDirectory()
 data_path = '/Users/fennng/Documents/phd/jupyter/nrms/' + MIND_type
