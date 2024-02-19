@@ -221,7 +221,7 @@ class MINDIterator(BaseIterator):
             memory_map_writer = np.memmap(cached_bert_pooled_output_file_name, dtype='float32', mode='w+', shape=(fileLines,25, 1537))
 
 
-        use_fake_data = True
+        use_fake_data = False
         if (not use_saved_bert) and selected_bert_model == "tf_hub_bert_1":
             pass
             # self.news_title_bert_index = bert_results["pooled_output"]
@@ -231,7 +231,7 @@ class MINDIterator(BaseIterator):
             if (use_fake_data):
                 firstLine = np.zeros((1, 25, 1537), dtype="float32")
                 #self.news_title_bert_index = firstLine
-                memory_map_writer[0] = firstLine
+                memory_map_writer[0] = firstLine[0]
                 memory_map_writer.flush()
 
             else:
@@ -261,7 +261,7 @@ class MINDIterator(BaseIterator):
                 # comment these two lines out when using saved bert
                 # self.news_title_bert_index = bert_title
                 # self.news_title_bert_index = np.asarray(self.news_title_bert_index)
-                memory_map_writer[0] = bert_title
+                memory_map_writer[0] = bert_title[0]
                 memory_map_writer.flush()
 
 
@@ -440,12 +440,12 @@ class MINDIterator(BaseIterator):
 
         if memory_map_writer is not None:
             memory_map_writer.flush()
+            del memory_map_writer
 
 
         if not use_saved_bert:
             #np.save(cached_bert_pooled_output_file_name, self.news_title_bert_index)
-            memory_map = np.memmap(cached_bert_pooled_output_file_name, dtype='float32', mode='r', shape=(fileLines, 25, 1357))
-            self.news_title_bert_index = memory_map
+            self.news_title_bert_index = np.memmap(cached_bert_pooled_output_file_name, dtype='float32', mode='r', shape=(fileLines, 25, 1357))
 
 
         print(f'self bert titles Shape:{self.news_title_bert_index.shape}')
