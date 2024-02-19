@@ -158,7 +158,7 @@ class MINDIterator(BaseIterator):
 
         count = 0
 
-        batch_size_for_bert = 128
+        batch_size_for_bert = 64
         batch_count_for_bert = 0;
         title_batch_prepared_for_bert = [];
 
@@ -257,7 +257,7 @@ class MINDIterator(BaseIterator):
                             title_batch_prepared_for_bert = []
                             batch_count_for_bert = 0
 
-                            self.news_title_bert_index = np.concatenate((self.news_title_bert_index, np.zeros((128, 25, 1537), dtype="float32")), axis=0)
+                            self.news_title_bert_index = np.concatenate((self.news_title_bert_index, np.zeros((batch_size_for_bert, 25, 1537), dtype="float32")), axis=0)
                         else:
                             inputs = deberta_tokenizer(
                                 title_batch_prepared_for_bert,
