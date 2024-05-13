@@ -29,9 +29,15 @@ batch_size = 32
 # Options: demo, small, large
 MIND_type = 'demo'
 
+if os.getenv('MIND_type') is not None:
+    MIND_type = os.getenv('MIND_type')
+
 tmpdir = TemporaryDirectory()
-data_path = '/Users/fennng/Documents/phd/jupyter/nrms/' + MIND_type
-#data_path = '/home/yden034/nrms2/' + MIND_type
+data_path = '/home/yden034/nrms2/' + MIND_type
+
+if os.getenv('HOME') == '/Users/fennng':
+    data_path = '/Users/fennng/Documents/phd/jupyter/nrms/' + MIND_type
+
 
 train_news_file = os.path.join(data_path, 'train', r'news.tsv')
 train_behaviors_file = os.path.join(data_path, 'train', r'behaviors.tsv')
